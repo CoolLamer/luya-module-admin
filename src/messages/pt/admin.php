@@ -356,16 +356,31 @@ return [
     
 // 1.2.2
     
-    'button_no' => 'No',
-    'crud_exportdata_btn' => 'Export Data',
-    'crud_exportdata_col_header' => 'Header',
-    'crud_exportdata_col_format' => 'Format',
+    'button_no' => 'Não',
+    'crud_exportdata_btn' => 'Exportar Dados',
+    'crud_exportdata_col_header' => 'Cabeçalho',
+    'crud_exportdata_col_format' => 'Formato',
     'crud_exportdata_col_format_csv' => 'CSV',
     'crud_exportdata_col_format_xlsx' => 'Excel (xlsx)',
-    'crud_exportdata_col_columns' => 'Columns',
-    'crud_exportdata_btn_generateexport' => 'Generate export',
-    'crud_exportdata_btn_downloadexport' => 'Download export',
-    'js_pagination_page' => 'Page',
-    'dashboard_log_message_delete' => 'Deleted a record in <strong>{container}</strong>.',
-    'model_tag_relations_count' => 'Used',
+    'crud_exportdata_col_columns' => 'Colunas',
+    'crud_exportdata_btn_generateexport' => 'Gerar exportação',
+    'crud_exportdata_btn_downloadexport' => 'Baixar exportação',
+    'js_pagination_page' => 'Página',
+    'dashboard_log_message_delete' => 'Excluído um registro no <strong>{container}</strong>.',
+    'model_tag_relations_count' => 'Usado',
+
+// 1.2.3
+
+    'active_button_duplicate_label' => 'Duplicate',
+    'active_button_duplicate_success' => 'A copy has been created.',
+    'active_button_duplicate_error' => 'Error while creating the copy: {message}',
+
+// 1.3
+
+    'model_tag_translation' => 'Translation',
+    'model_tag_translation_hint' => 'An optional translation for the tag in the given language. This allows to assign and output the same tag on multi-language websites.',
+    'active_button_timestamp_label' => 'Timestamp',
+    'active_button_timestamp_success' => 'Timestamp has been set successfull.',
+    'active_button_timestamp_error' => 'Error while storing timestamp.',
+
 ];

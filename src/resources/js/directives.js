@@ -159,7 +159,7 @@
      * <span tooltip tooltip-text="Tooltip" tooltip-disabled="variableMightBeTrueMightBeFalseMightChange">Span Text</span>
      * ```
      */
-    zaa.directive("tooltip", ['$document', function ($document) {
+    zaa.directive("tooltip", ['$document', '$http', function ($document, $http) {
         return {
             restrict: 'A',
             scope: {
@@ -169,6 +169,7 @@
                 'tooltipOffsetTop': '@',
                 'tooltipOffsetLeft': '@',
                 'tooltipImageUrl': '@',
+                'tooltipPreviewUrl': '@',
                 'tooltipDisabled': '='
             },
             link: function (scope, element, attr) {
@@ -213,12 +214,14 @@
                         offset = positions[defaultPosition]();
                     }
 
-                    if (typeof scope.tooltipOffsetTop == 'number') {
-                        offset.top = offset.top + scope.tooltipOffsetTop;
+                    var tooltipOffsetTop = parseInt(scope.tooltipOffsetTop);
+                    if (tooltipOffsetTop) {
+                        offset.top = offset.top + tooltipOffsetTop;
                     }
 
-                    if (typeof scope.tooltipOffsetLeft == 'number') {
-                        offset.left = offset.left + scope.tooltipOffsetLeft;
+                    var tooltipOffsetLeft = parseInt(scope.tooltipOffsetLeft);
+                    if (tooltipOffsetLeft) {
+                        offset.left = offset.left + tooltipOffsetLeft;
                     }
 
                     scope.pop.css(offset);
@@ -248,6 +251,12 @@
                             };
                             image.src = scope.tooltipImageUrl;
                             $html.find('.tooltip-inner').append(image);
+                        }
+
+                        if(scope.tooltipPreviewUrl) {
+                            $http.get(scope.tooltipPreviewUrl).then(function(response) {
+                                $html.find('.tooltip-inner').append('<div class="tooltip-preview">'+response.data+'</div>');
+                            });
                         }
 
                         scope.pop = $html;
@@ -957,15 +966,18 @@
             },
     		controller: ['$scope', '$filter', function($scope, $filter) {
     			
-    			$scope.$watch(function() { return $scope.listener; }, function(n, o) {
-    				$scope.model = $filter('slugify')(n);
+    			$scope.$watch('listener', function(n, o) {
+                    if (n !== undefined) {
+                        $scope.model = $filter('slugify')(n);
+                    }
     			});
     			
-    			$scope.$watch(function() { return $scope.model; }, function(n, o) {
+    			$scope.$watch('model', function(n, o) {
     				if (n!=o) {
     					$scope.model = $filter('slugify')(n);
     				}
-    			});
+                });
+                
     		}],
     		template:function() {
                 return '<div class="form-group form-side-by-side" ng-class="{\'input--hide-label\': i18n}"><div class="form-side form-side-label"><label for="{{id}}">{{label}}</label></div><div class="form-side"><input id="{{id}}" insert-paste-listener ng-model="model" type="text" class="form-control" placeholder="{{placeholder}}" /></div></div>';
@@ -2439,7 +2451,7 @@
                 		return;
                 	}
                 	
-                	$scope.ServiceFilesData.getFile(n).then(function(file) {
+                	ServiceFilesData.getFile(n).then(function(file) {
                 		$scope.fileinfo = file;
                 	}, function() {
                         $scope.fileinfo = null;
@@ -2471,13 +2483,13 @@
                     // now access trough getImage of images service
                     if ($scope.imageId != 0) {
                         ServiceImagesData.getImage($scope.imageId).then(function(response) {
-                            if (response.thumbnail) {
-                                $scope.imageSrc = response.thumbnail.source;
+                            if (response.tinyCropImage) {
+                                $scope.imageSrc = response.tinyCropImage.source;
                             } else {
                                 // the thumbnail does not exists, try to force a new xhr request which should generate the thumbnail:
                                 ServiceImagesData.getImage($scope.imageId, true).then(function(r) {
-                                    if (r.thumbnail) {
-                                        $scope.imageSrc = r.thumbnail.source;
+                                    if (r.tinyCropImage) {
+                                        $scope.imageSrc = r.tinyCropImage.source;
                                     }
                                 });
                             }
@@ -2499,26 +2511,6 @@
             },
             controller: ['$scope', '$filter', 'ServiceImagesData', 'ServiceFilesData', function($scope, $filter, ServiceImagesData, ServiceFilesData) {
 
-                // ServiceFilesData inheritance
-
-                /*
-                $scope.filesData = ServiceFilesData.data;
-
-                $scope.$on('service:FilesData', function(event, data) {
-                    $scope.filesData = data;
-                });
-                */
-
-                // ServiceImagesData inheritance
-
-                /*
-                $scope.imagesData = ServiceImagesData.data;
-
-                $scope.$on('service:ImagesData', function(event, data) {
-                    $scope.imagesData = data;
-                });
-                */
-
                 $scope.$watch('imageId', function(n, o) {
                     if (n != o) {
                         $scope.imageSrc = null;
@@ -2530,7 +2522,7 @@
                 $scope.$watch(function() { return $scope.imageId }, function(n, o) {
                     if (n != undefined || n != null) {
                         ServiceImagesData.getImage(n).then(function(response) {
-                            $scope.imageSrc = response.thumbnail.source;
+                            $scope.imageSrc = response.tinyCropImage.source;
                         }, function() {
                             $scope.imageSrc = null;  
                         });
@@ -2552,20 +2544,6 @@
                 ngModel : '='
             },
             controller: ['$scope', '$filter', 'ServiceFilesData', function($scope, $filter, ServiceFilesData) {
-
-                // ServiceFilesData inhertiance
-
-            	/*
-            	$scope.filesData = ServiceFilesData.data;
-
-            	$scope.$on('service:FilesData', function(event, data) {
-            		$scope.filesData = data;
-                });
-                */
-
-                // controller logic
-
-            	//$scope.ngModel = 0;
             	
             	$scope.modal = {state: 1};
 
@@ -2589,7 +2567,7 @@
                 };
 
             	$scope.$watch(function() { return $scope.ngModel }, function(n, o) {
-            		if (n == null || n == undefined) {
+            		if (n == null || n == undefined || !angular.isNumber(n)) {
             			return null;
             		}
                     
@@ -2623,20 +2601,6 @@
                 options : '=',
             },
             controller : ['$scope', '$http', '$filter', 'ServiceFiltersData', 'ServiceImagesData', 'AdminToastService', 'ServiceFilesData', function($scope, $http, $filter, ServiceFiltersData, ServiceImagesData, AdminToastService, ServiceFilesData) {
-
-                // ServiceImagesData inheritance
-
-        		/*
-                $scope.imagesData = ServiceImagesData.data;
-
-                $scope.$on('service:ImagesData', function(event, data) {
-                    $scope.imagesData = data;
-                });
-
-                $scope.imagesDataReload = function() {
-                    return ServiceImagesData.load(true);
-                }
-                */
 
                 // ServiceFiltesrData inheritance
             	
@@ -2693,44 +2657,8 @@
                         $scope.thumb = false;
                         $scope.ngModel = 0;
                     });
-                    
-                	/*
-                    var items = $filter('filter')($scope.imagesData, {fileId: $scope.fileId, filterId: $scope.filterId}, true);
-                    if (items && items.length == 0) {
-                        $scope.imageLoading = true;
-                        // image does not exists make request.
-                        $http.post('admin/api-admin-storage/image-upload', $.param({ fileId : $scope.fileId, filterId : $scope.filterId }), {
-                            headers : {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'}
-                        }).then(function(transport) {
-                            if (!transport.data.error) {
-                                $scope.imagesDataReload().then(function(r) {
-                                    $scope.ngModel = transport.data.id;
-                                    AdminToastService.success(i18n['js_dir_image_upload_ok']);
-                                    $scope.imageLoading = false;
-                                });
-                            }
-                        }, function(error) {
-                        	AdminToastService.error(i18n['js_dir_image_filter_error']);
-                            $scope.imageLoading = false;
-                        });
-                    } else {
-                        var item = items[0];
-                        $scope.ngModel = item.id
-                        $scope.imageinfo = item;
-                    }
-                    */
                 };
 
-                /*
-                $scope.$watch(function() { return $scope.filterId }, function(n, o) {
-                	if (n == null || n == undefined || $scope.fileId == 0 || n == 0) {
-                		return;
-                	}
-                	
-                	$scope.filterApply();
-                });
-                */
-                
                 $scope.changeFilter = function() {
                 	$scope.filterApply();
                 };
@@ -2740,21 +2668,6 @@
                 	if (n != null && n != undefined) {
                 		$scope.filterApply();
                 	}
-                	
-                	
-                	/*
-                	console.log('==> image fileId watch', n, o);
-                	if (n !== undefined && n != null && n != o) {
-                		if (n == 0) {
-                            $scope.filterId = 0;
-                            $scope.imageinfo = null;
-                            $scope.ngModel = 0;
-                        } else {
-                        	console.log('[!!!!!!!!!!!!!!]from fileid watcher', n);
-                        	$scope.filterApply();
-                        }
-                    }
-                    */
                 });
 
                 $scope.$watch(function() { return $scope.ngModel }, function(n, o) {
@@ -2770,73 +2683,13 @@
                             $scope.thumb = false;
                         });
                 	}
-                	
-                	
-                	
-                	/*
-                    if (n != 0 && n != null && n !== undefined) {
-                        //var filtering = $filter('findidfilter')($scope.imagesData, n, true);
-                        ServiceImagesData.getImage(n).then(function(response) {
-                        	$scope.imageinfo = response;
-                        	$scope.fileId = response.file_id;
-                        	$scope.filterId = response.filter_id;
-                        });
-                    }
-                    if (n == undefined || n == 0) {
-                    	$scope.fileId = 0;
-                        $scope.filterId = 0;
-                        $scope.imageinfo = null;
-                        $scope.thumb = false;
-                    }
-					*/
                 });
                 
                 $scope.applyImageDetails = function(imageInfo) {
                 	$scope.imageinfo = imageInfo;
                 	$scope.thumb = imageInfo;
-                	/*
-                	if (imageInfo.filterId == 0) {
-                		// the original image is usual to bug, therefor we use a  thumbnail size instaed
-                		var thumbnail = $filter('findthumbnail')($scope.imagesData, n.fileId, $scope.getThumbnailFilter().id);
-                	} else {
-                		$scope.thumb = imageInfo;
-                	}
-                	*/
                 };
 
-                
-                /*
-                $scope.getThumbnailFilter = function() {
-                	if ($scope.thumbnailfilter === null) {
-                		if ('medium-thumbnail' in $scope.filtersData) {
-                			$scope.thumbnailfilter = $scope.filtersData['medium-thumbnail'];
-                		}
-                	}
-                	return $scope.thumbnailfilter;
-                };
-                */
-
-               
-                
-                /*
-                $scope.$watch('imageinfo', function(n, o) {
-                	
-                	
-                	if (n != 0 && n != null && n !== undefined) {
-                		if (n.filterId != 0) {
-                			$scope.thumb = n;
-                		} else {
-                			var result = $filter('findthumbnail')($scope.imagesData, n.fileId, $scope.getThumbnailFilter().id);
-                			if (!result) {
-                				$scope.thumb = n;
-                			} else {
-                				$scope.thumb = result;
-                			}
-                		}
-                	}
-                })
-                
-                	*/
             }],
             templateUrl : 'storageImageUpload'
         }
@@ -2854,8 +2707,8 @@
                 onlyImages : '@onlyImages'
             },
             controller : [
-            	'$scope', '$http', '$filter', '$timeout', '$q', 'Upload', 'ServiceFoldersData', 'ServiceFilesData', 'LuyaLoading', 'AdminToastService', 'ServiceFoldersDirecotryId', 
-            	function($scope, $http, $filter, $timeout, $q, Upload, ServiceFoldersData, ServiceFilesData, LuyaLoading, AdminToastService, ServiceFoldersDirecotryId) {
+            	'$scope', '$http', '$filter', '$timeout', '$q', 'Upload', 'ServiceFoldersData', 'ServiceFilesData', 'LuyaLoading', 'AdminToastService', 'ServiceFoldersDirecotryId', 'ServiceAdminTags', 
+            	function($scope, $http, $filter, $timeout, $q, Upload, ServiceFoldersData, ServiceFilesData, LuyaLoading, AdminToastService, ServiceFoldersDirecotryId, ServiceAdminTags) {
 
                 // ServiceFoldersData inheritance
 
@@ -2868,6 +2721,14 @@
                 $scope.foldersDataReload = function() {
                     return ServiceFoldersData.load(true);
                 };
+
+                // Service Tags
+
+                $scope.tags = [];
+
+                ServiceAdminTags.load().then(function(response) {
+                    $scope.tags = response;
+                });
 
                 // ServiceFilesData inheritance
 
@@ -3018,7 +2879,10 @@
                         			AdminToastService.error(response.data.message);
                         			LuyaLoading.stop();
                         		}
-	                        });
+	                        }, function(error) {
+                                AdminToastService.error(error.data.message);
+                                LuyaLoading.stop();
+                            });
                         }
                     }
                 };
@@ -3042,9 +2906,10 @@
                             }
                         });
                     }, function (response) {
-                        if (response.status > 0) {
-                            $scope.errorMsg = true;
-                        }
+                        file = response.data;
+                        AdminToastService.error(file.message);
+                        LuyaLoading.stop();
+                        $scope.errorMsg = true
                     });
 
                     file.upload.progress(function (evt) {
@@ -3228,6 +3093,7 @@
 
                 $scope.fileDetailFolder = false;
                 
+                
                 $scope.openFileDetail = function(file, force) {
                 	if ($scope.fileDetail.id == file.id && force !== true) {
                 		$scope.closeFileDetail();
@@ -3242,6 +3108,23 @@
                 		
                 		$scope.fileDetail = file;
                 	}
+                };
+
+                $scope.saveTagRelation = function(tag, file) {
+                    $http.post('admin/api-admin-storage/toggle-file-tag', {tagId: tag.id, fileId: file.id}).then(function(response) {
+                        $scope.fileDetailFull.tags = response.data;
+                    });
+                };
+
+                $scope.fileHasTag = function(tag) {
+                    var exists = false;
+                    angular.forEach($scope.fileDetailFull.tags, function(value) {
+                        if (value.id == tag.id) {
+                            exists = true;
+                        }
+                    });
+
+                    return exists;
                 };
                 
                 $scope.updateFileData = function() {

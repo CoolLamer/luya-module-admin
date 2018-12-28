@@ -599,7 +599,7 @@ abstract class BaseFileSystemStorage extends Component
      * @return bool|\luya\admin\image\Item|Exception Returns the item object, if an error happens and $throwException is off `false` is returned otherwhise an exception is thrown.
      * @throws \luya\Exception
      */
-    public function addImage($fileId, $filterId = 0, $throwException = true)
+    public function addImage($fileId, $filterId = 0, $throwException = false)
     {
         try {
             // if the filterId is provded as a string the filter will be looked up by its name in the get filters array list.
@@ -648,7 +648,7 @@ abstract class BaseFileSystemStorage extends Component
 
     /**
      * Just creating the image based on input informations without usage of storage files or images list.
-     * 
+     *
      * @since 1.2.2.1
      * @return \luya\admin\models\StorageImage|false Returns the storage image model on success, otherwise false.
      */
@@ -694,6 +694,8 @@ abstract class BaseFileSystemStorage extends Component
         $this->fileSystemSaveFile($tempFile, $fileName);
         unlink($tempFile);
 
+        $this->flushImageArray();
+
         // ensure the existing of the model
         if ($image) {
             $image->resolution_height = $resolution['height'];
@@ -735,7 +737,6 @@ abstract class BaseFileSystemStorage extends Component
                 ->indexBy(['id']);
 
             $this->_foldersArray = $this->getQueryCacheHelper($query, self::CACHE_KEY_FOLDER);
-
         }
 
         return $this->_foldersArray;
@@ -858,11 +859,18 @@ abstract class BaseFileSystemStorage extends Component
     }
 
     /**
-     * 
+     * Get the filter id based on the identifier.
+     *
+     * This is a short hand method as its used very often
+     *
+     * @param string $identifier
+     * @return integer
+     * @since 1.2.2.1
      */
     public function getFilterId($identifier)
     {
-        return $this->getFiltersArrayItem($identifier)['id'];
+        $filter = $this->getFiltersArrayItem($identifier);
+        return $filter ? (int) $filter['id'] : false;
     }
 
     /**
@@ -900,6 +908,17 @@ abstract class BaseFileSystemStorage extends Component
     }
 
     /**
+     * Flush only images array and image cache.
+     *
+     * @since 1.2.3
+     */
+    public function flushImageArray()
+    {
+        $this->_imagesArray = null;
+        $this->deleteHasCache(self::CACHE_KEY_IMAGE);
+    }
+
+    /**
      * This method allwos you to generate all thumbnails for the file manager, you can trigger this process when
      * importing or creating several images at once, so the user does not have to create the thumbnails
      *
@@ -910,8 +929,8 @@ abstract class BaseFileSystemStorage extends Component
         foreach ($this->findFiles(['is_hidden' => false, 'is_deleted' => false]) as $file) {
             if ($file->isImage) {
                 // create tiny thumbnail
-                $this->createImage($file->id, TinyCrop::identifier());
-                $this->createImage($file->id, MediumThumbnail::identifier());
+                $this->createImage($file->id, $this->getFilterId(TinyCrop::identifier()));
+                $this->createImage($file->id, $this->getFilterId(MediumThumbnail::identifier()));
             }
         }
 

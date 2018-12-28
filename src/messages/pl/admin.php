@@ -364,4 +364,19 @@ return [
     'js_pagination_page' => 'Strona',
     'dashboard_log_message_delete' => 'Usunięto rekord w <strong>{container}</strong>.',
     'model_tag_relations_count' => 'Używany',
+
+// 1.2.3
+
+    'active_button_duplicate_label' => 'Duplikat',
+    'active_button_duplicate_success' => 'Kopia została utworzona.',
+    'active_button_duplicate_error' => 'Błąd podczas tworzenia kopii: {message}',
+
+// 1.3
+
+    'model_tag_translation' => 'Tłumaczenie',
+    'model_tag_translation_hint' => 'Opcjonalne tłumaczenie dla tagu w danym języku. Pozwala to przypisać i wypisać ten sam znacznik na stronach wielojęzycznych.',
+    'active_button_timestamp_label' => 'Timestamp',
+    'active_button_timestamp_success' => 'Timestamp has been set successfull.',
+    'active_button_timestamp_error' => 'Error while storing timestamp.',
+
 ];

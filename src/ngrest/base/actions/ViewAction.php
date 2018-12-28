@@ -26,10 +26,10 @@ class ViewAction extends \yii\rest\ViewAction
      * the ID must be a string of the primary key values separated by commas.
      * The order of the primary key values should follow that returned by the `primaryKey()` method
      * of the model.
-     * 
+     *
      * > This override of parent models allows us to join the relation data without using extraFields() basically its a main idea
      * > behind yii relations and serializer which is not used for the view action without overriding findModel().
-     * 
+     *
      * @return ActiveRecordInterface the model found
      * @throws NotFoundHttpException if the model cannot be found
      * @since 1.2.2.1
@@ -40,19 +40,10 @@ class ViewAction extends \yii\rest\ViewAction
             return call_user_func($this->findModel, $id, $this);
         }
 
-        /* @var $modelClass ActiveRecordInterface */
-        $modelClass = $this->modelClass;
-        $keys = $modelClass::primaryKey();
-        if (count($keys) > 1) {
-            $values = explode(',', $id);
-            if (count($keys) === count($values)) {
-                $model = $this->findModelFromCondition(array_combine($keys, $values), $keys, $modelClass);
-            }
-        } elseif ($id !== null) {
-            $model = $this->findModelFromCondition($id, $keys, $modelClass);
-        }
+        
+        $model = $this->controller->findModelClassObject($this->modelClass, $id, 'view');
 
-        if (isset($model)) {
+        if ($model) {
             return $model;
         }
 
@@ -60,21 +51,8 @@ class ViewAction extends \yii\rest\ViewAction
     }
 
     /**
-     * This equals to the ActieRecord::findByCondition which is sadly a protected method.
-     *  
-     * @since 1.2.2.1
-     * @return yii\db\ActiveRecord
-     */
-    protected function findModelFromCondition($condition, $primaryKey, $modelClass)
-    {
-        $condition = [$primaryKey[0] => is_array($condition) ? array_values($condition) : $condition];
-
-        return $modelClass::find()->andWhere($condition)->with($this->controller->getWithRelation('view'))->one();
-    }
-
-    /**
      * Return the model for a given resource id.
-     * 
+     *
      * @return yii\db\ActiveRecordInterface
      */
     public function run($id)

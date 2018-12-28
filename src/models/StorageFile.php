@@ -9,6 +9,9 @@ use luya\helpers\FileHelper;
 use luya\admin\behaviors\LogBehavior;
 use luya\admin\filters\TinyCrop;
 use luya\admin\filters\MediumThumbnail;
+use luya\admin\traits\TaggableTrait;
+use luya\admin\helpers\I18n;
+use luya\helpers\Json;
 
 /**
  * This is the model class for table "admin_storage_file".
@@ -38,6 +41,8 @@ use luya\admin\filters\MediumThumbnail;
  */
 final class StorageFile extends ActiveRecord
 {
+    use TaggableTrait;
+    
     /**
      * @inheritdoc
      */
@@ -109,7 +114,6 @@ final class StorageFile extends ActiveRecord
     public function delete()
     {
         if ($this->beforeDelete()) {
-        
             if (!Yii::$app->storage->fileSystemDeleteFile($this->name_new_compound)) {
                 Logger::error("Unable to remove file from filesystem: " . $this->name_new_compound);
             }
@@ -133,7 +137,7 @@ final class StorageFile extends ActiveRecord
     
     /**
      * Get all images fro the given file.
-     * 
+     *
      * @return \yii\db\ActiveQuery
      */
     public function getImages()
@@ -208,13 +212,21 @@ final class StorageFile extends ActiveRecord
      * The file indicates to be an image and return value is true.
      *
      * @return boolean Whether the file is of type image or not.
-     * @since 1.2.2
+     * @since 1.2.2.1
      */
     public function getIsImage()
     {
         return in_array($this->mime_type, Yii::$app->storage->imageMimeTypes);
     }
 
+    /**
+     * Create the thumbnail for this given file if its an image.
+     *
+     * > This method is used internal when uploading a file which is an image, the file manager preview images are created here.
+     *
+     * @return array Returns an array with the key source which contains the source to the thumbnail.
+     * @since 1.2.2.1
+     */
     public function getCreateThumbnail()
     {
         if (!$this->isImage) {
@@ -235,6 +247,14 @@ final class StorageFile extends ActiveRecord
         }
     }
 
+    /**
+     * Create the thumbnail medium for this given file if its an image.
+     *
+     * > This method is used internal when uploading a file which is an image, the file manager preview images are created here.
+     *
+     * @return array Returns an array with the key source which contains the source to the thumbnail medium.
+     * @since 1.2.2.1
+     */
     public function getCreateThumbnailMedium()
     {
         if (!$this->isImage) {
@@ -256,10 +276,31 @@ final class StorageFile extends ActiveRecord
     }
 
     /**
+     * Get the parsed response for a file caption as expand.
+     *
+     * @since 1.2.3
+     * @return string The caption parsed for the current input langauge.
+     */
+    public function getCaptions()
+    {
+        return Json::decode($this->caption);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function fields()
+    {
+        $fields = parent::fields();
+        $fields['captions'] = 'captions';
+        return $fields;
+    }
+
+    /**
      * @inheritdoc
      */
     public function extraFields()
     {
-        return ['user', 'file', 'images', 'source', 'createThumbnail', 'createThumbnailMedium', 'isImage', 'sizeReadable'];
+        return ['user', 'file', 'images', 'createThumbnail', 'createThumbnailMedium', 'isImage', 'sizeReadable', 'source', 'tags'];
     }
 }

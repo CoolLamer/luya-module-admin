@@ -109,7 +109,7 @@ class SelectRelationActiveQuery extends Plugin
     public function renderList($id, $ngModel)
     {
         if ($this->asyncList) {
-            return $this->createTag('async-value', null, ['api' => $this->getRelationApiEndpoint(), 'model' => $ngModel, 'fields' => Json::encode($this->labelField)]);    
+            return $this->createTag('async-value', null, ['api' => $this->getRelationApiEndpoint(), 'model' => $ngModel, 'fields' => Json::encode($this->labelField)]);
         }
         
         return $this->createListTag($ngModel);
@@ -128,7 +128,7 @@ class SelectRelationActiveQuery extends Plugin
     
     /**
      * Get the admin api endpoint name.
-     * 
+     *
      * @return string
      * @since 1.2.2
      */
@@ -171,8 +171,15 @@ class SelectRelationActiveQuery extends Plugin
         } else {
             $model = $this->_query->modelClass;
             $row = $model::find()->select($this->labelField)->where(['id' => $value])->asArray(true)->one();
-            
+
             if (!empty($row)) {
+                $row = array_map (function($fieldValue, $fieldName) use ($model) {
+                    if ((new $model)->isI18n($fieldName)) {
+                        return $this->i18nDecodedGetActive($this->i18nFieldDecode($fieldValue));
+                    }
+                    return $fieldValue;
+                }, $row, array_keys ($row));
+            
                 $this->writeAttribute($event, implode(" ", $row));
             }
         }
