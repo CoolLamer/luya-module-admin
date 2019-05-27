@@ -14,6 +14,7 @@ use luya\admin\aws\UserHistorySummaryActiveWindow;
 use luya\admin\base\RestActiveController;
 use yii\base\InvalidArgumentException;
 use luya\validators\StrengthValidator;
+use luya\admin\aws\ApiRequestInsightActiveWindow;
 
 /**
  * User Model represents all Administration Users.
@@ -40,6 +41,7 @@ use luya\validators\StrengthValidator;
  * @property integer $email_verification_token_timestamp
  * @property integer $login_attempt
  * @property integer $login_attempt_lock_expiration
+ * @property boolean $is_request_logger_enabled
  *
  * @author Basil Suter <basil@nadar.io>
  * @since 1.0.0
@@ -139,12 +141,13 @@ class User extends NgRestModel implements IdentityInterface, ChangePasswordInter
     public function ngRestAttributeTypes()
     {
         return [
-            'title' => ['selectArray', 'data' => static::getTitles(), 'initValue' => 0],
+            'title' => ['selectArray', 'data' => static::getTitles()],
             'firstname' => 'text',
             'lastname' => 'text',
             'email' => 'text',
             'password' => 'password',
             'login_attempt_lock_expiration' => 'datetime',
+            'is_request_logger_enabled' => 'toggleStatus',
         ];
     }
     
@@ -164,7 +167,7 @@ class User extends NgRestModel implements IdentityInterface, ChangePasswordInter
     public function ngRestExtraAttributeTypes()
     {
         return [
-            'lastloginTimestamp' => 'datetime',
+            'lastloginTimestamp' => ['datetime', 'sortField' => false],
         ];
     }
     
@@ -174,7 +177,7 @@ class User extends NgRestModel implements IdentityInterface, ChangePasswordInter
     public function ngRestScopes()
     {
         return [
-            ['list', ['firstname', 'lastname', 'email', 'lastloginTimestamp']],
+            ['list', ['title', 'firstname', 'lastname', 'email', 'lastloginTimestamp']],
             ['create', ['title', 'firstname', 'lastname', 'email', 'password']],
             ['update', ['title', 'firstname', 'lastname', 'email', 'login_attempt_lock_expiration']],
             ['delete', true],
@@ -187,8 +190,9 @@ class User extends NgRestModel implements IdentityInterface, ChangePasswordInter
     public function ngRestActiveWindows()
     {
         return [
-            ['class' => UserHistorySummaryActiveWindow::class, 'label' => false],
             ['class' => ChangePasswordActiveWindow::class, 'label' => false],
+            ['class' => UserHistorySummaryActiveWindow::class, 'label' => false],
+            ['class' => ApiRequestInsightActiveWindow::class, 'label' => false],
         ];
     }
 
@@ -197,7 +201,7 @@ class User extends NgRestModel implements IdentityInterface, ChangePasswordInter
      */
     public static function tableName()
     {
-        return 'admin_user';
+        return '{{%admin_user}}';
     }
 
     /**
@@ -223,7 +227,7 @@ class User extends NgRestModel implements IdentityInterface, ChangePasswordInter
             [['email'], 'unique', 'except' => ['login']],
             [['auth_token'], 'unique'],
             [['settings'], 'string'],
-            [['email_verification_token_timestamp', 'login_attempt', 'login_attempt_lock_expiration', 'is_deleted', 'is_api_user'], 'integer'],
+            [['email_verification_token_timestamp', 'login_attempt', 'login_attempt_lock_expiration', 'is_deleted', 'is_api_user', 'is_request_logger_enabled'], 'integer'],
             [['email_verification_token'], 'string', 'length' => 40],
             [['password'], StrengthValidator::class, 'when' => function () {
                 return Module::getInstance()->strongPasswordPolicy;
@@ -255,8 +259,8 @@ class User extends NgRestModel implements IdentityInterface, ChangePasswordInter
     public function scenarios()
     {
         return [
-            'restcreate' => ['title', 'firstname', 'lastname', 'email', 'password'],
-            'restupdate' => ['title', 'firstname', 'lastname', 'email', 'login_attempt_lock_expiration'],
+            'restcreate' => ['title', 'firstname', 'lastname', 'email', 'password', 'is_request_logger_enabled'],
+            'restupdate' => ['title', 'firstname', 'lastname', 'email', 'login_attempt_lock_expiration', 'is_request_logger_enabled'],
             'changepassword' => ['password', 'password_salt'],
             'login' => ['email', 'password', 'force_reload'],
             'securelayer' => ['secure_token'],
@@ -378,7 +382,7 @@ class User extends NgRestModel implements IdentityInterface, ChangePasswordInter
      */
     public function getGroups()
     {
-        return $this->hasMany(Group::class, ['id' => 'group_id'])->viaTable('admin_user_group', ['user_id' => 'id']);
+        return $this->hasMany(Group::class, ['id' => 'group_id'])->viaTable('{{%admin_user_group}}', ['user_id' => 'id']);
     }
 
     /**
@@ -475,7 +479,7 @@ class User extends NgRestModel implements IdentityInterface, ChangePasswordInter
      */
     public static function findIdentity($id)
     {
-        return static::find()->joinWith(['userLogins ul'])->andWhere(['admin_user.id' => $id, 'is_destroyed' => false, 'is_api_user' => false, 'ip' => Yii::$app->request->userIP])->one();
+        return static::find()->joinWith(['userLogins ul'])->andWhere(['{{%admin_user}}.id' => $id, 'is_destroyed' => false, 'is_api_user' => false, 'ip' => Yii::$app->request->userIP])->one();
     }
 
     /**

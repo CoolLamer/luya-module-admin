@@ -20,7 +20,7 @@ use luya\Exception;
 class LocalFileSystem extends BaseFileSystemStorage
 {
     private $_httpPath;
-    
+
     /**
      * @var string The name of the folder which is used to storage the data inside the @webroot directory.
      */
@@ -137,7 +137,7 @@ class LocalFileSystem extends BaseFileSystemStorage
      */
     public function fileSystemContent($fileName)
     {
-        return file_get_contents($this->fileServerPath($fileName));
+        return FileHelper::getFileContent($this->fileServerPath($fileName));
     }
 
     /**
@@ -149,11 +149,11 @@ class LocalFileSystem extends BaseFileSystemStorage
         
         if (is_uploaded_file($source)) {
             if (!@move_uploaded_file($source, $savePath)) {
-                throw new Exception("error while moving uploaded file from $source to $savePath");
+                throw new Exception("Error while moving an uploaded file from \"$source\" to \"$savePath\".");
             }
         } else {
             if (!@copy($source, $savePath)) {
-                throw new $source("error while copy file from $source to $savePath.");
+                throw new Exception("Error while copy the file from \"$source\" to \"$savePath\".");
             }
         }
 

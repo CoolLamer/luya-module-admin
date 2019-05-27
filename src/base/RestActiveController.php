@@ -9,6 +9,8 @@ use luya\rest\UserBehaviorInterface;
 use yii\web\ForbiddenHttpException;
 use luya\rest\ActiveController;
 use luya\admin\Module as AdminModule;
+use yii\base\InvalidConfigException;
+use luya\admin\behaviors\UserRequestBehavior;
 
 /**
  * Base class for Rest Active Controllers.
@@ -33,6 +35,19 @@ class RestActiveController extends ActiveController implements UserBehaviorInter
     }
     
     /**
+     * {@inheritDoc}
+     */
+    public function behaviors()
+    {
+        $behaviors = parent::behaviors();
+        $behaviors[] = [
+            'class' => UserRequestBehavior::class,
+        ];
+
+        return $behaviors;
+    }
+
+    /**
      * Get the current user auth object.
      *
      * @return \luya\admin\components\AdminUser
@@ -56,7 +71,8 @@ class RestActiveController extends ActiveController implements UserBehaviorInter
             case 'filter':
             case 'export':
             case 'list':
-                $type = false;
+            case 'toggle-notification':
+                $type = Auth::CAN_VIEW;
                 break;
             case 'create':
                 $type = Auth::CAN_CREATE;
@@ -77,9 +93,42 @@ class RestActiveController extends ActiveController implements UserBehaviorInter
 
         UserOnline::refreshUser($this->userAuthClass()->identity, $this->id);
         
-        if (!Yii::$app->auth->matchApi($this->userAuthClass()->identity->id, $this->id, $type)) {
-            throw new ForbiddenHttpException('Unable to access this action due to insufficient permissions.');
+        $this->can($type);
+    }
+
+    /**
+     * @var integer Contains the id of the current running auth id
+     * @since 2.0.0
+     */
+    protected $authId;
+
+    /**
+     * Check if the current user have given permissions type.
+     *
+     * ```php
+     * $this->can(Auth::CAN_UPDATE);
+     * ```
+     *
+     * If the user has no permission to update a forbidden http exception is thrown.
+     *
+     * @param integer $type
+     * @return boolean Returns true otherwise throws an exception
+     * @throws ForbiddenHttpException
+     * @since 2.0.0
+     */
+    public function can($type)
+    {
+        if (!in_array($type, [Auth::CAN_CREATE, Auth::CAN_DELETE, Auth::CAN_UPDATE, Auth::CAN_VIEW])) {
+            throw new InvalidConfigException("Invalid type of permission check.");
         }
+
+        $this->authId = Yii::$app->auth->matchApi($this->userAuthClass()->identity->id, $this->id, $type);
+
+        if (!$this->authId) {
+            throw new ForbiddenHttpException("User is unable to access the API due to insufficient permissions.");
+        }
+
+        return true;
     }
 
     /**

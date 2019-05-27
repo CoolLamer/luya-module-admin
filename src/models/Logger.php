@@ -98,7 +98,7 @@ final class Logger extends NgRestModel
      */
     public static function tableName()
     {
-        return 'admin_logger';
+        return '{{%admin_logger}}';
     }
 
     /**
@@ -128,7 +128,7 @@ final class Logger extends NgRestModel
     public function ngRestExtraAttributeTypes()
     {
         return [
-            'typeBadge' => 'html',
+            'typeBadge' => ['html', 'sortField' => 'type'],
         ];
     }
     

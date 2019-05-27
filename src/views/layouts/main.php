@@ -80,17 +80,41 @@ $this->beginPage()
                             <span class="mainnav-label">
                                 {{item.alias}}
                             </span>
+                            <span ng-show="hasUnreadNotificaton(item)" class="mainnav-notification-badge"></span>
                         </span>
                     </li>
                 </ul>
             </div>
             <div class="mainnav-static mainnav-static--bottom" ng-class="{'mainnav-hidden': !isOpen}">
                 <ul class="mainnav-list">
-                    <li class="mainnav-entry" tooltip tooltip-text="<?= Admin::t('layout_btn_reload'); ?>" tooltip-position="right" tooltip-disabled="isHover">
-                        <span class="mainnav-link" ng-click="reload()">
+                    <li class="mainnav-entry">
+                        <span class="mainnav-link">
                             <i class="mainnav-icon material-icons">refresh</i>
                             <span class="mainnav-label">
                                 <?= Admin::t('layout_btn_reload'); ?>
+                            </span>
+                            <span class="mainnav-tooltip-big-wrapper">
+                                <span class="mainnav-tooltip-big">
+                                    <ul class="mainnav-tooltip-big-menu">
+                                        <li class="mainnav-tooltip-big-menu-item" ng-click="reload(false)">
+                                            <span class="mainnav-tooltip-big-menu-item-link">
+                                                <i class="material-icons">refresh</i> <?= Admin::t('layout_btn_reload_admin'); ?>
+                                            </span>
+                                        </li>
+                                        <li class="mainnav-tooltip-big-menu-item" ng-click="reload()">
+                                            <span class="mainnav-tooltip-big-menu-item-link">
+                                                <i class="material-icons">layers_clear</i> <?= Admin::t('layout_btn_reload_cache'); ?>
+                                            </span>
+                                        </li>
+                                        <?php foreach ($this->context->reloadButtonArray() as $key => $button): ?>
+                                        <li class="mainnav-tooltip-big-menu-item" ng-click="reloadButtonCall(<?= $key; ?>)">
+                                            <span class="mainnav-tooltip-big-menu-item-link">
+                                                <i class="material-icons"><?= $button->icon; ?></i> <?= $button->label; ?>
+                                            </span>
+                                        </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                </span>
                             </span>
                         </span>
                     </li>
@@ -209,11 +233,11 @@ $this->beginPage()
                     <div class="card" ng-class="{'card-closed': !groupVisibility}">
                         <div class="card-header" ng-click="groupVisibility=!groupVisibility">
                             <span class="material-icons card-toggle-indicator">keyboard_arrow_down</span>
-                            <i class="material-icons">{{item.menuItem.icon}}</i>&nbsp;<span>{{item.menuItem.alias}}</span><small class="ml-1"><i>({{item.data.length}})</i></small>
+                            <i class="material-icons">{{item.menuItem.icon}}</i>&nbsp;<span>{{item.menuItem.alias}}</span><span class="badge badge-secondary float-right">{{item.data.length}}</span>
                         </div>
                         <div class="card-body p-2">
-                            <div class="table-responsive-wrapper">
-                                <table class="table table-hover table-align-middle mb-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover table-align-middle">
                                     <thead>
                                         <tr ng-repeat="row in item.data | limitTo:1">
                                             <th ng-hide="!item.hideFields.indexOf(k)" ng-repeat="(k,v) in row">{{k}}</th>
@@ -252,7 +276,7 @@ $this->beginPage()
         <div class="debug-panel debug-panel-network" ng-class="{'debug-panel-network-open': debugDetail}" ng-if="debugTab==1">
             <div class="debug-network-items pr-3">
                 <p class="lead">Requests ({{AdminDebugBar.data.length}})<button type="button" ng-click="AdminDebugBar.clear()" class="btn btn-icon mb-3 btn-sm float-right">Clear list <i class="material-icons">clear</i></button></p>
-                <div class="table-responsive-wrapper">
+                <div class="table-responsive">
                     <table class="table table-striped table-sm table-hover table-bordered">
                         <thead>
                             <tr>
@@ -270,8 +294,7 @@ $this->beginPage()
                 </div>
             </div>
             <div class="debug-network-detail" ng-show="debugDetail">
-                
-                <div class="table-responsive-wrapper">
+                <div class="table-responsive">
                     <p class="lead">Request<button type="button" ng-click="closeDebugDetail()" class="btn btn-icon mb-3 btn-sm float-right">close <i class="material-icons">close</i></button></p>
                     <table class="table table-striped table-bordered">
                         <tr>
@@ -309,7 +332,7 @@ $this->beginPage()
             </div>
         </div>
         <div class="debug-panel" ng-if="debugTab==2">
-            <div class="table-responsive-wrapper">
+            <div class="table-responsive">
                 <table class="table table-striped table-sm table-bordered">
                     <thead>
                     <tr>
@@ -336,7 +359,7 @@ $this->beginPage()
             </div>
         </div>
         <div class="debug-panel" ng-if="debugTab==3">
-            <div class="table-responsive-wrapper">
+            <div class="table-responsive">
                 <div ng-repeat="(packageName, package) in packages" class="mb-3">
                     <p class="lead">{{ packageName }}</p>
                     <table class="table table-striped table-sm table-bordered">

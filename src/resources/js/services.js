@@ -105,7 +105,7 @@ zaa.factory("ServiceFoldersData", ['$http', '$q', '$rootScope', function($http, 
 
 $scope.folderId = ServiceFoldersDirecotryId.folderId;
 					
-$scope.$on('FoldersDirectoryId', function(event, folderId) {
+$scope.$on('service:FoldersDirectoryId', function(event, folderId) {
 	$scope.folderId = folderId;
 });
 
@@ -184,6 +184,9 @@ zaa.factory("ServiceImagesData", ['$http', '$q', '$rootScope', '$log', function(
 
 	service.loadImages = function(imagesArray) {
 		return $q(function(resolve, reject) {
+			if (imagesArray.length == 0) {
+				return resolve();
+			}
 			$http.post('admin/api-admin-storage/images-info?expand=source,tinyCropImage', {ids: imagesArray}).then(function(response) {
 				angular.forEach(response.data, function(value) {
 					service.data[value.id] = value;

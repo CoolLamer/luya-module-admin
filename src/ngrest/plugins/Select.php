@@ -17,15 +17,17 @@ abstract class Select extends Plugin
      * If enabled the list tag will transform into an interactive schedling overlay.
      *
      * @var boolean
-     * @since 1.3.0
+     * @since 2.0.0
      */
     public $scheduling = false;
 
     /**
      * @var integer|string If an init value is available which is matching with the select data, you can not reset the model to null. So initvalue ensures
-     * that a value must be selected, or selects your initvalue by default.
+     * that a value must be selected, or selects your initvalue by default. Since version 2.0 the default value is `''` instead of `0` otherwise the common
+     * rule setup for those attributes won't handle the required field correctly until you set `isEmpty` option in the validator config. Using `null` as init value
+     * will remove the field from the payload, therefore using `''` instead.
      */
-    public $initValue = 0;
+    public $initValue = '';
     
     /**
      * @var string This value will be displayed in the ngrest list overview if the given value is empty(). In order to turn off this behavior set `emptyListValue` to false.
@@ -56,10 +58,10 @@ abstract class Select extends Plugin
      */
     public function renderCreate($id, $ngModel)
     {
-        return $this->createFormTag(self::TYPE_SELECT, $id, $ngModel, [
+        return $this->createFormTag(self::TYPE_SELECT, $id, $ngModel, array_filter([
             'initvalue' => $this->initValue,
             'options' => $this->getServiceName('selectdata'),
-        ]);
+        ]));
     }
 
     /**

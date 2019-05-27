@@ -22,14 +22,23 @@ class NgRestModelTest extends AdminTestCase
         $this->assertSame($scenes['default'], $scenes['restupdate']);
         $this->assertSame($scenes['restcreate'], $scenes['restcreate']);
     }
+
+    public function testBehaviorIsAttached()
+    {
+        $model = new TestNgRestModel();
+        $behaviors = $model->getBehaviors();
     
+        $this->assertArrayHasKey('NgRestEventBehavior', $behaviors);
+        $this->assertArrayHasKey('LogBehavior', $behaviors);
+    }
+
     public function testGenericSearchFields()
     {
         $model = new TagFixture();
         $model->load();
         $tag = $model->getModel('tag1');
         
-        $this->assertSame(['admin_tag.id', 'admin_tag.name'], $tag->genericSearchFields());
+        $this->assertSame(['{{%admin_tag}}.id', '{{%admin_tag}}.name', '{{%admin_tag}}.translation'], $tag->genericSearchFields());
     }
     
     public function testGenericSearch()
@@ -38,7 +47,7 @@ class NgRestModelTest extends AdminTestCase
         $model->load();
         $tag = $model->getModel('tag1');
         $results = $tag->genericSearch('John');
-        /** @var $results \yii\db\ActiveQuery */
+        
         $this->assertSame('john', $results->one()->name);
     }
     
@@ -63,7 +72,7 @@ class NgRestModelTest extends AdminTestCase
         $this->assertTrue($array['delete']);
         
         $this->assertArrayHasKey('aw', $array);
-        $this->assertArrayHasKey('2b449de2c624cfd8ddd9fad2eb41a508a9384644', $array['aw']);
+        $this->assertArrayHasKey('1f7228610892e760f9f28dd133da5a25100dbf1c', $array['aw']);
     }
     
     public function testCompareNewAndOldConfig()
@@ -71,12 +80,12 @@ class NgRestModelTest extends AdminTestCase
         $old = new TestNgRestModel();
         $oldArray = $old->getNgRestConfig()->getConfig();
         
-        unset($oldArray['aw']['2b449de2c624cfd8ddd9fad2eb41a508a9384644']['objectConfig']['ngRestModelClass']);
+        unset($oldArray['aw']['1f7228610892e760f9f28dd133da5a25100dbf1c']['objectConfig']['ngRestModelClass']);
         
         $new = new TestNewNotationNgRestModel();
         $newArray = $new->getNgRestConfig()->getConfig();
         
-        unset($newArray['aw']['2b449de2c624cfd8ddd9fad2eb41a508a9384644']['objectConfig']['ngRestModelClass']);
+        unset($newArray['aw']['1f7228610892e760f9f28dd133da5a25100dbf1c']['objectConfig']['ngRestModelClass']);
         
         $this->assertSame($oldArray, $newArray);
     }

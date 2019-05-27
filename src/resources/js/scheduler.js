@@ -12,6 +12,7 @@
   *     primary-key-value="{{primaryKeyModelValue}}"
   *     model-class="luya\admin\models\User"
   *     attribute-name="is_deleted"
+  *     title="A title"
   *     attribute-values="[{"label":"Draft","value":0},{"label":"Archived","value":2},{"label":"Published","value":1}]"
   * />
   * ```
@@ -26,13 +27,26 @@ zaa.directive("luyaSchedule", function() {
             primaryKeyValue: "=",
             modelClass: "@",
             attributeName: "@",
-            onlyIcon: "@"
+            onlyIcon: "@",
+            title: "@"
         },
         controller: ['$scope', '$http', '$timeout', function($scope, $http, $timeout) {
 
             // toggle window
 
             $scope.isVisible = false;
+            $scope.upcomingAccordionOpen = true;
+            $scope.archiveAccordionOpen = false;
+            $scope.showDatepicker = false;
+            $scope.modalPositionClass = "";
+
+            $scope.$watch('showDatepicker', function(newValue) {
+                if (newValue === 0) {
+                    // disable the schedule checkbox, ensure to reset the timestamp.
+                    var date = new Date();
+                    $scope.timestamp = date.getTime() / 1000;
+                }
+            });
 
             $scope.toggleWindow = function() {
                 $scope.isVisible = !$scope.isVisible;
@@ -44,17 +58,39 @@ zaa.directive("luyaSchedule", function() {
                 }
             };
 
-            // get existing job data
+            $scope.escModal = function() {
+                if($scope.isVisible) {
+                    $scope.isVisible = false;
+                    $scope.hideInlineModal();
+                }
+            };
 
-            $scope.logs = [];
+            $scope.getUniqueFormId = function(prefix) {
+                return prefix + $scope.primaryKeyValue + '_' + $scope.attributeName;
+            };
+
+            // get existing job data
+            $scope.logs = {
+                'upcoming': [],
+                'archived': []
+            };
 
             $scope.getLogTable = function(callback) {
                 $http.get('admin/api-admin-common/scheduler-log?model='+$scope.modelClass+'&pk=' + $scope.primaryKeyValue).then(function(response) {
-                    $scope.logs = response.data;
+                    $scope.logs.archived = [];
+                    $scope.logs.upcoming = [];
+
+                    response.data.forEach(function(entry) {
+                        if(entry.is_done) {
+                            $scope.logs.archived.push(entry);
+                        } else {
+                            $scope.logs.upcoming.push(entry);
+                        }
+                    });
 
                     // check if latestId is done, if yes, maybe directly change the value for a given field.
-                    angular.forEach($scope.logs, function(value, key) {
-                        if (value.id == $scope.latestId && value.is_done) {
+                    angular.forEach($scope.logs.archived, function(value, key) {
+                        if (value.id == $scope.latestId) {
                             $scope.value = value.new_attribute_value;
                         }
                     });
@@ -81,6 +117,7 @@ zaa.directive("luyaSchedule", function() {
             $scope.latestId;
             $scope.timestamp = parseInt(now);
             $scope.newvalue = $scope.value;
+
             $scope.saveNewJob = function() {
                 $http.post('admin/api-admin-common/scheduler-add', {
                     model_class: $scope.modelClass,
@@ -94,126 +131,123 @@ zaa.directive("luyaSchedule", function() {
                     // post success message with admin toast
                 });
             };
+
+            $scope.deleteJob = function(job) {
+                $http.delete('admin/api-admin-common/scheduler-delete?id=' + job.id).then(function(response) {
+                    $scope.getLogTable();
+                });
+            };
         }],
         link: function (scope, element, attr) {
             var inlineModal = element.find('.inlinemodal');
+            var inlineModalArrow = element.find('.inlinemodal-arrow');
             var button = element.find('.scheduler-btn');
 
-            scope.getModalBcr = function() {
-                var buttonBcr = button[0].getBoundingClientRect();
-                var currentStyling = inlineModal.attr('style');
+            // The spacing the modal has to the window border
+            // and button
+            var modalMargin = 15;
 
-                inlineModal.css({display: 'block', left: buttonBcr.left, top: (buttonBcr.top + buttonBcr.height), height: 'auto', width: '100%', maxWidth: '1000px', overflow: 'hidden'});
-                var modalBcr = inlineModal[0].getBoundingClientRect();
-                if(currentStyling) {
-                    inlineModal.attr('style', currentStyling);
+            // If the space right to the button is smaller than minSpaceRight
+            // and the space to the left is bigger than to the right
+            // the modal will be aligned to the left of the button
+            var minSpaceRight = 500;
+
+            // If the space left or right of the button is smaller than minSpace
+            // the modal will be display in full width
+            var minSpace = 300;
+
+            // The max width of the modal, defined in the scss component inlinemodal
+            var maxWidth = 1100;
+
+            // Get the button position and align the modal to the right if
+            // it hast at least "minSpaceRight" spacing to the right
+            // If not, align left
+            scope.alignModal = function() {
+                var documentSize = {width: $(document).width(), height: element.parents('.luya-content')[0].scrollHeight || $(document).height()};
+                var buttonBcr = button[0].getBoundingClientRect();
+
+                var buttonSpaceRight = documentSize.width - (buttonBcr.left + buttonBcr.width + (modalMargin * 2));
+                var buttonSpaceLeft = buttonBcr.left - (modalMargin * 2);
+                var alignRight = buttonSpaceRight >= minSpaceRight || buttonSpaceRight >= buttonSpaceLeft;
+                var notEnoughSpace = buttonSpaceLeft < minSpace && buttonSpaceRight < minSpace;
+
+                inlineModal.removeClass('inlinemodal--left inlinemodal--right inlinemodal--full');
+                if(notEnoughSpace) {
+                    inlineModal.addClass('inlinemodal--full');
+                    inlineModal.css({
+                        display: 'block',
+                        left: modalMargin,
+                        right: modalMargin,
+                        top: modalMargin,
+                        bottom: modalMargin
+                    });
+                } else if (alignRight) {
+                    inlineModal.addClass('inlinemodal--right');
+                    inlineModal.css({
+                        display: 'block',
+                        left: buttonBcr.left + buttonBcr.width + modalMargin,
+                        right: modalMargin,
+                        width: 'auto'
+                    });
                 } else {
-                    inlineModal.css('display', 'none');
+                    inlineModal.addClass('inlinemodal--left');
+                    inlineModal.css({
+                        display: 'block',
+                        left: buttonBcr.left > maxWidth ? 'auto' : modalMargin,
+                        right: (documentSize.width + modalMargin) - buttonBcr.left,
+                        width: buttonBcr.left > maxWidth ? '100%' : 'auto'
+                    });
                 }
 
-                return modalBcr;
+                scope.alignModalArrow();
             };
 
-            scope.updateModalBcr = function() {
-                var scrollHeight = element.parents('.luya-content')[0].scrollHeight;
-
-                if(scrollHeight) {
-                    var padding = parseInt(element.parents('.luya-content').css('padding-top').replace('px', '')) + parseInt(element.parents('.luya-content').css('padding-bottom').replace('px', ''));
-                    scrollHeight = scrollHeight - padding;
-                }
-
-                var documentSize = {width: $(document).width(), height: scrollHeight || $(document).height()};
-                var inlineModalBcr = scope.getModalBcr();
+            // Calculate the new top value for the arrow inside the inline modal
+            // We also check if the arrow is "inside" the modal and if not
+            // set a min or max top value
+            scope.alignModalArrow = function() {
+                var modalBcr = inlineModal[0].getBoundingClientRect();
                 var buttonBcr = button[0].getBoundingClientRect();
+                var arrowHeight = inlineModalArrow.outerHeight();
 
-                // Check if modal overlaps to the right and decrease left value
-                if(inlineModalBcr.x + inlineModalBcr.width > documentSize.width) {
-                    // +25 for 25px spacing from the border
-                    inlineModalBcr.x = inlineModalBcr.x - ((inlineModalBcr.x + inlineModalBcr.width) - documentSize.width + 25);
+                var newTop = buttonBcr.top - modalMargin - (arrowHeight / 2); // 7.5 equals the height of the arrow / 2
 
-                    // Minimum left is 25
-                    if(inlineModalBcr.x < 25) {
-                        inlineModalBcr.x = 25;
+                var topMin = 10;
+                var topMax = modalBcr.height - modalMargin - (arrowHeight / 2) - 10;
 
-                        // The modal now overlaps to the right, set max-width
-                        if(inlineModalBcr.x + inlineModalBcr.width > documentSize.width) {
-                            // -50 because of the spacing on the left and
-                            // the spacing we want on the right
-                            inlineModal.css('width', documentSize.width - 50);
-                        }
-                    }
+                if (newTop <= topMin) {
+                    newTop = topMin;
+                } else if (newTop >= (topMax > 0 ? topMax : 5000)) { // Top max might be below 0 if the modal bcr is 0
+                    newTop = topMax;
                 }
 
-                // Check if the modal is too high and disappears on the bottom
-                // of the window
-                // +25 because we want a 25px spacing
-                if((inlineModalBcr.y + 25) + inlineModalBcr.height > documentSize.height) {
-
-                    console.log('too high, align top');
-                    // Too high, set top position
-                    inlineModalBcr.y = buttonBcr.y - inlineModalBcr.height;
-
-                    // Check if modal disappears on top of the window
-                    if(inlineModalBcr.y - inlineModalBcr.height < 0) {
-
-                        console.log('will overlap');
-
-                        // Enable scrolling of content
-                        inlineModal.find('.inlinemodal-content').css('overflow', 'auto');
-
-                        // In this case the inline modal is too high and
-                        // needs to be resized
-                        if(buttonBcr.y > documentSize.height - buttonBcr.y) {
-                            console.log('above');
-                            // Space above the button is bigger than below
-                            inlineModalBcr.y = 25; // 25 px from top
-                            inlineModal.css('height', buttonBcr.y - inlineModalBcr.y - 5); // -5 for better spacing between modal and clicked button
-                        } else {
-                            console.log('below');
-                            // Space below the button is bigger than above
-                            inlineModalBcr.y = buttonBcr.y + buttonBcr.height;
-                            // +25 for 25px spacing from the border
-                            inlineModal.css('height', inlineModalBcr.height - ((inlineModalBcr.y + inlineModalBcr.height) - (documentSize.height - 25)));
-                        }
-                    } else {
-                        // Set height to auto
-                        inlineModal.css('height', 'auto');
-                    }
-                } else {
-                    // Set height to auto
-                    inlineModal.css('height', 'auto');
-                }
-
-                inlineModal.css({
-                    top: inlineModalBcr.top,
-                    left: inlineModalBcr.left
+                inlineModalArrow.css({
+                    top: newTop
                 });
             };
 
             scope.showInlineModal = function() {
-                var inlineModalBcr = scope.getModalBcr();
-                var documentSize = {width: $(document).width(), height: element.parents('.luya-content')[0].scrollHeight || $(document).height()};
-
-                scope.updateModalBcr();
-                inlineModal.css({
-                    display: 'block',
-                    zIndex: 500
-                })
+                scope.alignModal();
             };
 
             scope.hideInlineModal = function() {
-                element.find('.inlinemodal').css({display: 'none'});
+                inlineModal.css({display: 'none'});
             };
 
             var w = angular.element(window);
-            w.bind('resize', function(){
+            w.bind('resize', function() {
                 if(scope.isVisible) {
-                    scope.updateModalBcr();
+                    scope.alignModal();
+                }
+            });
+            $(window).on('scroll', function() {
+                if(scope.isVisible) {
+                    scope.alignModalArrow();
                 }
             });
             element.parents().on('scroll', function() {
                 if(scope.isVisible) {
-                    scope.updateModalBcr();
+                    scope.alignModalArrow();
                 }
             });
         },
@@ -222,33 +256,82 @@ zaa.directive("luyaSchedule", function() {
                         '<button ng-click="toggleWindow()" type="button" class="scheduler-btn btn btn-link">' +
                             '<i class="material-icons">timelapse</i><span ng-hide="onlyIcon">{{valueToLabel(value)}}</span>' +
                         '</button>' +
-                        '<div class="inlinemodal" style="width: 100%; max-width: 1000px; display: none;">' +
-                            '<div class="inlinemodal-head clearfix">' +
-                                '<span class="btn btn-cancel btn-icon float-right" ng-click="toggleWindow()"></span>' +
-                            '</div>' +
-                            '<div class="inlinemodal-content">' +
-                                '<div class="clearfix">' +
-                                    '<div class="row">'+
-                                        '<div class="col">'+
-                                            '<p class="lead">Log</p>'+
-                                            '<table class="table table-bordered">'+
-                                                '<thead><tr><th>New Value</th><th>Schedule Time</th><th>Is Done</th></tr></thead>'+
-                                                '<tr ng-repeat="log in logs">'+
-                                                    '<td>{{valueToLabel(log.new_attribute_value)}}</td><td>{{log.schedule_timestamp*1000 | date:\'short\'}}</td><td>{{log.is_done}}</td>'+
-                                                '</tr>' +
-                                                '</table>'+
-                                            '</div>' +
-                                        '<div class="col">'+
-                                            '<p class="lead">Schedule Event</p>'+
-                                            '<zaa-datetime model="timestamp" label="Zeitpunkt" />'+
-                                            '<zaa-select model="newvalue" options="attributeValues" label="Neuer Wert" />'+
-                                            '<button type="button" class="btn btn-save btn-icon" ng-click="saveNewJob()"></button>'+
+                        '<div class="inlinemodal" style="display: none;" ng-class="modalPositionClass" zaa-esc="escModal()">' +
+                            '<div class="inlinemodal-inner">' +
+                                '<div class="inlinemodal-head clearfix">' +
+                                    '<div class="modal-header">' +
+                                        '<h5 class="modal-title">{{title}}</h5>' +
+                                        '<div class="modal-close">' +
+                                            '<button type="button" class="close" aria-label="Close" ng-click="toggleWindow()">' +
+                                                '<span aria-hidden="true"><span class="modal-esc">ESC</span> &times;</span>' +
+                                            '</button>' +
                                         '</div>' +
                                     '</div>' +
                                 '</div>' +
+                                '<div class="inlinemodal-content">' +
+                                    '<div class="clearfix">' +
+                                        '<zaa-select model="newvalue" options="attributeValues" label="' + i18n['js_scheduler_new_value'] + '" />' +
+                                        '<zaa-checkbox model="showDatepicker" fieldid="{{getUniqueFormId(\'datepicker\')}}" label="' + i18n['js_scheduler_show_datepicker'] + '" />'+
+                                        '<zaa-datetime ng-show="showDatepicker" model="timestamp" label="' + i18n['js_scheduler_time'] + '" />' +
+                                        '<button type="button" class="btn btn-save btn-icon float-right" ng-click="saveNewJob()">' + i18n['js_scheduler_save'] + '</button>' +
+                                    '</div>' +
+                                    
+                                    '<div class="card mt-4" ng-class="{\'card-closed\': !upcomingAccordionOpen}" ng-hide="logs.upcoming.length <= 0">' +
+                                        '<div class="card-header" ng-click="upcomingAccordionOpen=!upcomingAccordionOpen">' +
+                                            '<span class="material-icons card-toggle-indicator">keyboard_arrow_down</span>' +
+                                            '<i class="material-icons">alarm</i>&nbsp;<span> ' + i18n['js_scheduler_title_upcoming'] + '</span><span class="badge badge-secondary float-right">{{logs.upcoming.length}}</span>' +
+                                        '</div>'  +
+                                        '<div class="card-body p-2">' +
+                                            '<div class="table-responsive">' +
+                                                '<table class="table table-hover table-align-middle">' +
+                                                    '<thead>' +
+                                                        '<tr>' +
+                                                            '<th>' + i18n['js_scheduler_table_newvalue'] + '</th>' +
+                                                            '<th>' + i18n['js_scheduler_table_timestamp'] + '</th>' +
+                                                            '<th></th>' +
+                                                        '</tr>' +
+                                                    '</thead>' +
+                                                    '<tbody>' +
+                                                        '<tr ng-repeat="log in logs.upcoming">' +
+                                                            '<td>{{valueToLabel(log.new_attribute_value)}}</td>'+
+                                                            '<td>{{log.schedule_timestamp*1000 | date:\'short\'}}</td>'+
+                                                            '<td style="width: 60px;"><button type="button" class="btn btn-delete btn-icon" ng-click="deleteJob(log)"></button></td>'+
+                                                        '</tr>' +
+                                                    '</tbody>' +
+                                                '</table>' +
+                                            '</div>' +
+                                        '</div>' +
+                                    '</div>' +
+
+                                    '<div class="card mt-3" ng-class="{\'card-closed\': !archiveAccordionOpen}" ng-hide="logs.archived.length <= 0">' +
+                                        '<div class="card-header" ng-click="archiveAccordionOpen=!archiveAccordionOpen">' +
+                                            '<span class="material-icons card-toggle-indicator">keyboard_arrow_down</span>' +
+                                            '<i class="material-icons">alarm_on</i>&nbsp;<span> ' + i18n['js_scheduler_title_completed'] + '</span><span class="badge badge-secondary float-right">{{logs.archived.length}}</span>' +
+                                        '</div>'  +
+                                        '<div class="card-body p-2">' +
+                                            '<div class="table-responsive">' +
+                                                '<table class="table table-hover table-align-middle">' +
+                                                    '<thead>' +
+                                                        '<tr>' +
+                                                            '<th>' + i18n['js_scheduler_table_newvalue'] + '</th>' +
+                                                            '<th>' + i18n['js_scheduler_table_timestamp'] + '</th>' +
+                                                        '</tr>' +
+                                                    '</thead>' +
+                                                    '<tbody>' +
+                                                        '<tr ng-repeat="log in logs.archived">' +
+                                                            '<td>{{valueToLabel(log.new_attribute_value)}}</td>'+
+                                                            '<td>{{log.schedule_timestamp*1000 | date:\'short\'}}</td>' +
+                                                        '</tr>' +
+                                                    '</tbody>' +
+                                                '</table>' +
+                                            '</div>' +
+                                        '</div>' +
+                                    '</div>' +
+
+                                '</div>' +
                             '</div>' +
+                            '<div class="inlinemodal-arrow"></div>' +
                         '</div>' +
-                        '<style>.temp-z-index-fix { z-index:100 }</style>' +
                     '</div>';
         }
     };

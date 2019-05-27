@@ -6,6 +6,7 @@ use luya\admin\models\Tag;
 use luya\admin\models\TagRelation;
 use luya\admin\ngrest\base\ActiveWindow;
 use luya\admin\Module;
+use luya\admin\traits\TaggableTrait;
 
 /**
  * Create an Active Window where you can assign tags to a row of the underlying table via a ref table.
@@ -51,7 +52,7 @@ class TaggableActiveWindow extends ActiveWindow
     public $module = 'admin';
     
     /**
-     * When removing Tag Active Window in 1.3 this can be removed.
+     * When removing Tag Active Window in 2.0 this can be removed.
      */
     public function getViewFolderName()
     {
@@ -127,7 +128,7 @@ class TaggableActiveWindow extends ActiveWindow
      */
     public function callbackLoadRelations()
     {
-        return TagRelation::find()->where(['table_name' => $this->tableName, 'pk_id' => $this->getItemId()])->asArray()->all();
+        return TagRelation::find()->where(['table_name' => TaggableTrait::cleanBaseTableName($this->tableName), 'pk_id' => $this->getItemId()])->asArray()->all();
     }
 
     /**
@@ -138,16 +139,16 @@ class TaggableActiveWindow extends ActiveWindow
      */
     public function callbackSaveRelation($tagId)
     {
-        $find = TagRelation::find()->where(['tag_id' => $tagId, 'table_name' => $this->tableName, 'pk_id' => $this->getItemId()])->one();
+        $find = TagRelation::find()->where(['tag_id' => $tagId, 'table_name' => TaggableTrait::cleanBaseTableName($this->tableName), 'pk_id' => $this->getItemId()])->one();
 
         if ($find) {
-            TagRelation::deleteAll(['tag_id' => $tagId, 'table_name' => $this->tableName, 'pk_id' => $this->getItemId()]);
+            TagRelation::deleteAll(['tag_id' => $tagId, 'table_name' => TaggableTrait::cleanBaseTableName($this->tableName), 'pk_id' => $this->getItemId()]);
             return 0;
         } else {
             $model = new TagRelation();
             $model->setAttributes([
                 'tag_id' => $tagId,
-                'table_name' => $this->tableName,
+                'table_name' => TaggableTrait::cleanBaseTableName($this->tableName),
                 'pk_id' => $this->getItemId(),
             ]);
             $model->insert(false);

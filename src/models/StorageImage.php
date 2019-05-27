@@ -27,7 +27,7 @@ final class StorageImage extends ActiveRecord
      */
     public static function tableName()
     {
-        return 'admin_storage_image';
+        return '{{%admin_storage_image}}';
     }
 
     /**
@@ -106,17 +106,6 @@ final class StorageImage extends ActiveRecord
     }
 
     /**
-     * Use getTinyCropImage().
-     *
-     * @since 1.2.2.1
-     * @deprecated 1.2.3 use getTinyCropImage() instead.
-     */
-    public function getThumbnail()
-    {
-        return $this->getFilterImage(TinyCrop::identifier());
-    }
-
-    /**
      * Return a storage image object representing the tiny crop which is used for file manager and crud list previews.
      *
      * The tiny crop image filter is also the thumbnail used in ngrest list (and file manager).
@@ -160,20 +149,43 @@ final class StorageImage extends ActiveRecord
     }
 
     /**
+     * Get an image for a given filter id of the current image.
+     *
+     * @param integer $filterId The filter id.
+     * @param boolean $checkImagesRelation If enabled the current relation `getImages()` will be used to check whether the file exists inside or not. This should only used when you preload this
+     * relation:
+     * ```php
+     * foreach (StorageImage::find()->where(['id', [1,3,4,5]])->with(['images'])->all() as $image) {
+     *     var_dump($image->imageFilter(1));
+     * }
+     * ```
+     * @return StorageImage
+     * @since 2.0.0
+     */
+    public function imageFilter($filterId, $checkImagesRelation = true)
+    {
+        if ($checkImagesRelation) {
+            foreach ($this->images as $image) {
+                if ($image->filter_id == $filterId) {
+                    return $image;
+                }
+            }
+        }
+        
+        return Yii::$app->storage->createImage($this->file_id, $filterId);
+    }
+
+    /**
      * @return boolean
      */
     public function deleteSource()
     {
-        $image = Yii::$app->storage->getImage($this->id);
-        if ($image) {
-            if (!Yii::$app->storage->fileSystemDeleteFile($image->systemFileName)) {
-                return false; // unable to unlink image
-            }
-        } else {
-            return false; // image not even found
-        }
-        
-        return true;
+        return Yii::$app->storage->fileSystemDeleteFile($this->filter_id . '_' . $this->file->name_new_compound);
+    }
+
+    public function getImages()
+    {
+        return $this->hasMany(self::class, ['file_id' => 'file_id']);
     }
     
     /**

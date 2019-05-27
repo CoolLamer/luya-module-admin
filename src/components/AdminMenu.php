@@ -72,7 +72,7 @@ class AdminMenu extends \yii\base\Component
      *                               [alias] => menu_access_item_user
      *                               [route] => admin/user/index
      *                               [icon] => person
-     *                               [permssionApiEndpoint] => api-admin-user
+     *                               [permissionApiEndpoint] => api-admin-user
      *                               [permissionIsRoute] =>
      *                               [permissionIsApi] => 1
      *                               [searchModelClass] =>
@@ -82,7 +82,7 @@ class AdminMenu extends \yii\base\Component
      *                               [alias] => menu_access_item_group
      *                               [route] => admin/group/index
      *                               [icon] => group
-     *                               [permssionApiEndpoint] => api-admin-group
+     *                               [permissionApiEndpoint] => api-admin-group
      *                               [permissionIsRoute] =>
      *                               [permissionIsApi] => 1
      *                               [searchModelClass] =>
@@ -165,37 +165,32 @@ class AdminMenu extends \yii\base\Component
             // check if this is an entrie with a permission
             if ($item['permissionIsRoute']) {
                 // verify if the permission is provided for this user:
-                // if the permission is granted will write inti $responseData,
+                // if the permission is granted will write in $responseData,
                 // if not we continue;
                 if (!Yii::$app->auth->matchRoute($this->getUserId(), $item['permissionRoute'])) {
                     continue;
                 }
             }
 
+            $authIds = [];
             // this item does have groups
             if (isset($item['groups'])) {
                 $permissionGranted = false;
 
                 // see if the groups has items
                 foreach ($item['groups'] as $groupName => $groupItem) {
-                    if (count($groupItem['items'])  > 0) {
-                        if ($permissionGranted) {
-                            continue;
-                        }
-
+                    if (count($groupItem['items']) > 0) {
                         foreach ($groupItem['items'] as $groupItemEntry) {
-                            // a previous entry already has solved the question if the permission is granted
-                            if ($permissionGranted) {
-                                continue;
-                            }
                             if ($groupItemEntry['permissionIsRoute']) {
                                 // when true, set permissionGranted to true
-                                if (Yii::$app->auth->matchRoute($this->getUserId(), $groupItemEntry['route'])) {
+                                if (($id = Yii::$app->auth->matchRoute($this->getUserId(), $groupItemEntry['route']))) {
+                                    $authIds[] = $id;
                                     $permissionGranted = true;
                                 }
                             } elseif ($groupItemEntry['permissionIsApi']) {
                                 // when true, set permissionGranted to true
-                                if (Yii::$app->auth->matchApi($this->getUserId(), $groupItemEntry['permssionApiEndpoint'])) {
+                                if (($id = Yii::$app->auth->matchApi($this->getUserId(), $groupItemEntry['permissionApiEndpoint']))) {
+                                    $authIds[] = $id;
                                     $permissionGranted = true;
                                 }
                             } else {
@@ -205,12 +200,14 @@ class AdminMenu extends \yii\base\Component
                     }
                 }
 
+                // skip menu stack for this item
                 if (!$permissionGranted) {
                     continue;
                 }
             }
             
             try {
+                // check if a translation exists, otherwise use alias instead.
                 $alias = Yii::t($item['moduleId'], $item['alias'], [], Yii::$app->language);
             } catch (\Exception $err) {
                 $alias = $item['alias'];
@@ -220,6 +217,7 @@ class AdminMenu extends \yii\base\Component
             $responseData[] = [
                 'moduleId' => $item['moduleId'],
                 'id' => $item['id'],
+                'authIds' => $authIds,
                 'template' => $item['template'],
                 'routing' => $item['routing'],
                 'alias' => $alias,
@@ -261,12 +259,14 @@ class AdminMenu extends \yii\base\Component
                 }
                 foreach ($groupItem['items'] as $groupItemKey => $groupItemEntry) {
                     if ($groupItemEntry['permissionIsRoute']) {
-                        if (!Yii::$app->auth->matchRoute($this->getUserId(), $groupItemEntry['route'])) {
+                        $id = Yii::$app->auth->matchRoute($this->getUserId(), $groupItemEntry['route']);
+                        if (!$id) {
                             unset($data['groups'][$groupName]['items'][$groupItemKey]);
                             continue;
                         }
                     } elseif ($groupItemEntry['permissionIsApi']) {
-                        if (!Yii::$app->auth->matchApi($this->getUserId(), $groupItemEntry['permssionApiEndpoint'])) {
+                        $id = Yii::$app->auth->matchApi($this->getUserId(), $groupItemEntry['permissionApiEndpoint']);
+                        if (!$id) {
                             unset($data['groups'][$groupName]['items'][$groupItemKey]);
                             continue;
                         }
@@ -279,8 +279,16 @@ class AdminMenu extends \yii\base\Component
                         $alias = $data['groups'][$groupName]['items'][$groupItemKey]['alias'];
                     }
                     
+                    // if a pool is available, the route will be modified by appending the pool param
+                    $pool = AdminMenuBuilder::getOptionValue($groupItemEntry, 'pool', null);
+                    if ($pool) {
+                        $data['groups'][$groupName]['items'][$groupItemKey]['route'] = $data['groups'][$groupName]['items'][$groupItemKey]['route'] . '?pool='.$pool;
+                    }
+
                     $data['groups'][$groupName]['items'][$groupItemKey]['hiddenInMenu'] = AdminMenuBuilder::getOptionValue($groupItemEntry, 'hiddenInMenu', false);
+                    $data['groups'][$groupName]['items'][$groupItemKey]['pool'] = AdminMenuBuilder::getOptionValue($groupItemEntry, 'pool', null);
                     $data['groups'][$groupName]['items'][$groupItemKey]['alias'] = $alias;
+                    $data['groups'][$groupName]['items'][$groupItemKey]['authId'] = $id;
                 }
                 
                 // if there are no items for this group, unset the group from the data array
@@ -337,16 +345,14 @@ class AdminMenu extends \yii\base\Component
      * @param string $api The Api Endpoint
      * @return array|boolean
      */
-    public function getApiDetail($api)
+    public function getApiDetail($api, $pool = null)
     {
         $items = $this->getItems();
         
-        $key = array_search($api, array_column($items, 'permssionApiEndpoint'));
-        
-        if ($key !== false) {
-            return $items[$key];
+        if ($pool) {
+            $items = ArrayHelper::searchColumns($items, 'pool', $pool);
         }
-        
-        return false;
+        $items = array_values($items); // reset keys to fix isset error
+        return ArrayHelper::searchColumn($items, 'permissionApiEndpoint', $api);
     }
 }

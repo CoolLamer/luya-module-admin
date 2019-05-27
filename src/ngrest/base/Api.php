@@ -9,19 +9,23 @@ use yii\base\InvalidCallException;
 use yii\base\ErrorException;
 use yii\base\InvalidConfigException;
 use yii\data\ActiveDataProvider;
+use yii\web\NotFoundHttpException;
 use luya\helpers\FileHelper;
 use luya\helpers\Url;
+use luya\helpers\Json;
 use luya\helpers\ExportHelper;
 use luya\admin\base\RestActiveController;
 use luya\admin\models\UserOnline;
 use luya\admin\ngrest\render\RenderActiveWindow;
 use luya\admin\ngrest\render\RenderActiveWindowCallback;
 use luya\admin\ngrest\NgRest;
-use yii\web\NotFoundHttpException;
-use yii\db\ActiveQuery;
+use luya\admin\ngrest\Config;
 use luya\helpers\ArrayHelper;
-use luya\admin\ngrest\base\actions\IndexAction;
 use luya\helpers\StringHelper;
+use luya\helpers\ObjectHelper;
+use luya\admin\traits\TaggableTrait;
+use yii\db\ActiveQueryInterface;
+use luya\admin\models\UserAuthNotification;
 
 /**
  * The RestActiveController for all NgRest implementations.
@@ -54,7 +58,8 @@ class Api extends RestActiveController
     public $pagination = ['defaultPageSize' => 25];
     
     /**
-     * @var string When a filter model is provided filter is enabled trough json request body, works only for index,list
+     * @var string When a filter model is provided filter is enabled trough json request body, works only for index and list.
+     * @see https://luya.io/guide/ngrest-api#filtering
      * @see https://www.yiiframework.com/doc/guide/2.0/en/output-data-providers#filtering-data-providers-using-data-filters
      * @since 1.2.2
      */
@@ -215,6 +220,8 @@ class Api extends RestActiveController
      *
      * > This will call the `ngRestFind()` method of the model.
      *
+     * Use in list, export
+     *
      * @see {{prepareIndexQuery()}}
      * @return \yii\db\ActiveQuery
      * @since 1.2.2
@@ -223,7 +230,52 @@ class Api extends RestActiveController
     {
         /* @var $modelClass \yii\db\BaseActiveRecord */
         $modelClass = $this->modelClass;
-        return $modelClass::ngRestFind()->with($this->getWithRelation('list'));
+
+        $find = $modelClass::ngRestFind();
+
+        // find the latest primary key value and store into row notifications user auth table
+        $pkValue = Json::encode($modelClass::findLatestPrimaryKeyValue());
+        
+        $notificationModel = UserAuthNotification::find()->where(['user_id' => Yii::$app->adminuser->id, 'auth_id' => $this->authId])->one();
+
+        if ($notificationModel) {
+            $notificationModel->model_latest_pk_value = $pkValue;
+            $notificationModel->model_class = $modelClass::className();
+            $notificationModel->save();
+        } else {
+            $notificationModel = new UserAuthNotification();
+            $notificationModel->auth_id = $this->authId;
+            $notificationModel->user_id = Yii::$app->adminuser->id;
+            $notificationModel->model_latest_pk_value = $pkValue;
+            $notificationModel->model_class = $modelClass::className();
+            $notificationModel->save();
+        }
+        
+        // check if a pool id is requested:
+        $this->appendPoolWhereCondition($find);
+
+        // add tags condition
+        $tagIds = Yii::$app->request->get('tags');
+        if ($tagIds) {
+            $subQuery = clone $find;
+            $inQuery = $subQuery->joinWith(['tags tags'])->andWhere(['tags.id' => array_unique(explode(",", $tagIds))])->select(['pk_id']);
+            $find->andWhere(['in', $modelClass::primaryKey(), $inQuery]);
+        }
+
+        return $find->with($this->getWithRelation('list'));
+    }
+
+    /**
+     * Append the pool where condition to a given query.
+     *
+     * If the pool identifier is not found, an exception will be thrown.
+     *
+     * @param ActiveQueryInterface $query
+     * @since 2.0.0
+     */
+    private function appendPoolWhereCondition(ActiveQueryInterface $query)
+    {
+        $query->inPool(Yii::$app->request->get('pool'));
     }
     
     /**
@@ -301,6 +353,8 @@ class Api extends RestActiveController
     private $_model;
 
     /**
+     * Get the ngrest model object (unloaded).
+     *
      * @return NgRestModel
      * @throws InvalidConfigException
      */
@@ -322,7 +376,7 @@ class Api extends RestActiveController
      *
      * If not found a NotFoundHttpException will be thrown.
      *
-     * @params integer|string $id The id to performe the findOne() method.
+     * @param integer|string $id The id to performe the findOne() method.
      * @throws NotFoundHttpException
      * @return \luya\admin\ngrest\base\NgRestModel
      */
@@ -341,20 +395,22 @@ class Api extends RestActiveController
     /**
      * Find the model for a given class and id.
      *
-     * @param [type] $modelClass
-     * @param [type] $id
-     * @return void
+     * @param string $modelClass the full qualified path to the model
+     * @param string $id The id which is a string, for example 1 or for composite keys its 1,4
+     * @param string $relationContext The name of the context, which is actually the action like `searach` or `index`.
+     * @return yii\db\ActiveRecord|boolean
      */
     public function findModelClassObject($modelClass, $id, $relationContext)
     {
+        // returns an array with the names of the primary keys
         $keys = $modelClass::primaryKey();
         if (count($keys) > 1) {
             $values = explode(',', $id);
             if (count($keys) === count($values)) {
-                return $this->findModelFromCondition(array_combine($keys, $values), $keys, $modelClass, $relationContext);
+                return $this->findModelFromCondition($values, $keys, $modelClass, $relationContext);
             }
         } elseif ($id !== null) {
-            return $this->findModelFromCondition($id, $keys, $modelClass, $relationContext);
+            return $this->findModelFromCondition([$id], $keys, $modelClass, $relationContext);
         }
 
         return false;
@@ -363,14 +419,26 @@ class Api extends RestActiveController
     /**
      * This equals to the ActieRecord::findByCondition which is sadly a protected method.
      *
+     * @param array $values An array with values for the given primary keys
+     * @param array $keys An array holding all primary keys
+     * @param string $modelClass The full qualified namespace to the model
+     * @param string $relationContext The name of the context like "search", "index", "list". Its acutally the action name
      * @since 1.2.3
      * @return yii\db\ActiveRecord
      */
-    protected function findModelFromCondition($condition, $primaryKey, $modelClass, $relationContext)
+    protected function findModelFromCondition(array $values, array $keys, $modelClass, $relationContext)
     {
-        $condition = [$primaryKey[0] => is_array($condition) ? array_values($condition) : $condition];
+        $condition = array_combine($keys, $values);
+        // If an api user the internal find methods are used to find items.
+        if (Yii::$app->adminuser->identity->is_api_user) {
+            // api calls will always use the "original" find method which is based on yii2 guide the best approach to hide given data by default.
+            $findModelInstance = $modelClass::find();
+        } else {
+            // if its an admin user which is browsing the ui the internal ngRestFind method is used.
+            $findModelInstance = $modelClass::ngRestFind();
+        }
 
-        return $modelClass::find()->andWhere($condition)->with($this->getWithRelation($relationContext))->one();
+        return $findModelInstance->andWhere($condition)->with($this->getWithRelation($relationContext))->one();
     }
     
     /**
@@ -410,15 +478,55 @@ class Api extends RestActiveController
         }
         
         $modelClass = $this->modelClass;
+
+        // check if taggable exists, if yes return all used tags for the
+        if (ObjectHelper::isTraitInstanceOf($this->model, TaggableTrait::class)) {
+            $tags = $this->model->findTags();
+        } else {
+            $tags = false;
+        }
+
+        $notificationMuteState = false;
+
+        $userAuthNotificationModel = UserAuthNotification::find()->where(['user_id' => Yii::$app->adminuser->id, 'auth_id' => $this->authId])->one();
+        if ($userAuthNotificationModel) {
+            $notificationMuteState = $userAuthNotificationModel->is_muted;
+        }
+
         return [
             'service' => $this->model->getNgRestServices(),
+            '_authId' => $this->authId,
+            '_tags' => $tags,
             '_hints' => $this->model->attributeHints(),
             '_settings' => $settings,
+            '_notifcation_mute_state' => $notificationMuteState,
             '_locked' => [
                 'data' => UserOnline::find()->select(['lock_pk', 'last_timestamp', 'u.firstname', 'u.lastname', 'u.id'])->joinWith('user as u')->where(['lock_table' => $modelClass::tableName()])->createCommand()->queryAll(),
                 'userId' => Yii::$app->adminuser->id,
             ],
         ];
+    }
+
+    public function actionToggleNotification()
+    {
+        $this->checkAccess('toggle-notification');
+        $newMuteState = Yii::$app->request->getBodyParam('mute');
+
+        $model = UserAuthNotification::find()->where(['user_id' => Yii::$app->adminuser->id, 'auth_id' => $this->authId])->one();
+
+        if ($model) {
+            $model->is_muted = (int) $newMuteState;
+            $model->save();
+        } else {
+            $model = new UserAuthNotification();
+            $model->is_muted = (int) $newMuteState;
+            $model->auth_id = $this->authId;
+            $model->user_id = Yii::$app->adminuser->id;
+            $model->model_class = $this->modelClass;
+
+        }
+
+        return $model;
     }
     
     /**
@@ -442,7 +550,27 @@ class Api extends RestActiveController
         return new ActiveDataProvider([
             'query' => $find->with($this->getWithRelation('search')),
             'pagination' => $this->pagination,
+            'sort' => [
+                'attributes' => $this->generateSortAttributes($this->model->getNgRestConfig()),
+            ]
         ]);
+    }
+
+    /**
+     * Generate an array of sortable attribute defintions from a ngrest config object.
+     *
+     * @param Config $config The Ngrest Config object
+     * @return array
+     * @since 2.0.0
+     */
+    public function generateSortAttributes(Config $config)
+    {
+        $sortAttributes = [];
+        foreach ($config->getPointerPlugins('list') as $plugin) {
+            $sortAttributes = ArrayHelper::merge($plugin->getSortField(), $sortAttributes);
+        }
+
+        return $sortAttributes;
     }
     
     /**
@@ -451,10 +579,11 @@ class Api extends RestActiveController
      * @param mixed $arrayIndex
      * @param mixed $id
      * @param string $modelClass The name of the model where the ngRestRelation is defined.
+     * @param string $query An optional query to filter the response for the given search term (since 2.0.0)
      * @throws InvalidCallException
      * @return \yii\data\ActiveDataProvider
      */
-    public function actionRelationCall($arrayIndex, $id, $modelClass)
+    public function actionRelationCall($arrayIndex, $id, $modelClass, $query = null)
     {
         $this->checkAccess('relation-call');
         
@@ -462,29 +591,42 @@ class Api extends RestActiveController
         $model = $modelClass::findOne((int) $id);
         
         if (!$model) {
-            throw new InvalidCallException("unable to resolve relation call model.");
+            throw new InvalidCallException("Unable to resolve relation call model.");
         }
         
-        /** @var $query \yii\db\Query */
-        $arrayItem = $model->ngRestRelations()[$arrayIndex];
+        /** @var $relation \luya\admin\ngrest\base\NgRestRelationInterface */
+        $relation = $model->getNgRestRelationByIndex($arrayIndex);
+
+        if (!$relation) {
+            throw new InvalidCallException("Unable to find the given ng rest relation for this index value.");
+        }
+
+        $find = $relation->getDataProvider();
         
-        if ($arrayItem instanceof NgRestRelation) {
-            $query = $arrayItem->getDataProvider();
-        } else {
-            $query = $arrayItem['dataProvider'];
+        if ($find instanceof ActiveQueryInterface && !$find->multiple) {
+            throw new InvalidConfigException("The relation definition must be a hasMany() relation.");
         }
         
-        if ($query instanceof ActiveQuery && !$query->multiple) {
-            throw new InvalidConfigException("The relation defintion must be a hasMany() relation.");
+        if ($find instanceof ActiveQueryInterface) {
+            $find->with($this->getWithRelation('relation-call'));
+            $this->appendPoolWhereCondition($find);
         }
-        
-        if ($query instanceof ActiveQueryInterface) {
-            $query->with($this->getWithRelation('relation-call'));
+
+        $targetModel = Yii::createObject(['class' => $relation->getTargetModel()]);
+
+        if ($query) {
+            foreach ($targetModel->getNgRestPrimaryKey() as $pkName) {
+                $searchQuery = $targetModel->ngRestFullQuerySearch($query)->select([$targetModel->tableName() . '.' . $pkName]);
+                $find->andWhere(['in', $targetModel->tableName() . '.' . $pkName, $searchQuery]);
+            }
         }
 
         return new ActiveDataProvider([
-            'query' => $query,
+            'query' => $find,
             'pagination' => $this->pagination,
+            'sort' => [
+                'attributes' => $this->generateSortAttributes($targetModel->getNgRestConfig()),
+            ]
         ]);
     }
     
@@ -492,10 +634,11 @@ class Api extends RestActiveController
      * Filter the Api response by a defined Filtername.
      *
      * @param string $filterName
+     * @param string $query An optional query to filter the response for the given search term (since 2.0.0)
      * @throws InvalidCallException
      * @return \yii\data\ActiveDataProvider
      */
-    public function actionFilter($filterName)
+    public function actionFilter($filterName, $query = null)
     {
         $this->checkAccess('filter');
         
@@ -504,12 +647,26 @@ class Api extends RestActiveController
         $filterName = Html::encode($filterName);
         
         if (!array_key_exists($filterName, $model->ngRestFilters())) {
-            throw new InvalidCallException("The requested filter does not exists in the filter list.");
+            throw new InvalidCallException("The requested filter '$filterName' does not exists in the filter list.");
         }
+
+        $find = $model->ngRestFilters()[$filterName];
+
+        if ($query) {
+            foreach ($model->getNgRestPrimaryKey() as $pkName) {
+                $searchQuery = $model->ngRestFullQuerySearch($query)->select([$model->tableName() . '.' . $pkName]);
+                $find->andWhere(['in', $model->tableName() . '.' . $pkName, $searchQuery]);
+            }
+        }
+
+        $this->appendPoolWhereCondition($find);
         
         return new ActiveDataProvider([
-            'query' => $model->ngRestFilters()[$filterName],
+            'query' => $find,
             'pagination' => $this->pagination,
+            'sort' => [
+                'attributes' => $this->generateSortAttributes($model->getNgRestConfig()),
+            ]
         ]);
     }
     
@@ -581,9 +738,10 @@ class Api extends RestActiveController
                 break;
         }
         
-        $tempData = ExportHelper::$type($this->model->find()->select($fields), $fields, (bool) $header);
+        $query = $this->prepareListQuery()->select($fields);
+        $tempData = ExportHelper::$type($query, $fields, (bool) $header);
         
-        $key = uniqid('ngre', true);
+        $key = uniqid('ngrestexport', true);
         
         $store = FileHelper::writeFile('@runtime/'.$key.'.tmp', $tempData);
         
@@ -596,8 +754,17 @@ class Api extends RestActiveController
             Yii::$app->session->set('tempNgRestFileName', Inflector::slug($this->model->tableName())  . '-export-'.date("Y-m-d-H-i").'.' . $extension);
             Yii::$app->session->set('tempNgRestFileMime', $mime);
             Yii::$app->session->set('tempNgRestFileKey', $key);
+
+            $url = Url::toRoute(['/'.$route], true);
+            $param = http_build_query(['key' => base64_encode($key), 'time' => time()]);
+
+            if (StringHelper::contains('?', $url)) {
+                $route = $url . "&" . $param;
+            } else {
+                $route = $url . "?" . $param;
+            }
             return [
-                'url' => Url::toRoute(['/'.$route, 'key' => base64_encode($key)]),
+                'url' => $route,
             ];
         }
         

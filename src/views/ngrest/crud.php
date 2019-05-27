@@ -37,6 +37,14 @@ $this->beginBody();
                             <a class="dropdown-item" ng-click="toggleExportModal()">
                                 <i class="material-icons">get_app</i><span><?= Module::t('crud_exportdata_btn'); ?></span>
                             </a>
+                            <a class="dropdown-item" ng-click="toggleNotificationMute()">
+                                <span ng-show="serviceResponse._notifcation_mute_state">
+                                    <i class="material-icons">visibility</i><span><?= Module::t('crud_notification_enable'); ?></span>
+                                </span>
+                                <span ng-show="!serviceResponse._notifcation_mute_state">
+                                    <i class="material-icons">visibility_off</i><span><?= Module::t('crud_notification_disable'); ?></span>
+                                </span>
+                            </a>
                             <?php foreach ($this->context->getSettingButtonDefinitions() as $button): ?>
                                 <?= $button; ?>
                             <?php endforeach; ?>
@@ -74,13 +82,15 @@ $this->beginBody();
                 </a>
             </li>
             <?php endif; ?>
-            <li class="nav-item nav-item-alternative" ng-repeat="lang in AdminLangService.data" ng-class="{'ml-auto' : $first}" ng-show="AdminLangService.data.length > 1">
+            <?php if (!empty($this->context->model->i18n)): ?>
+            <li class="nav-item nav-item-alternative" ng-repeat="lang in AdminLangService.data" ng-class="{'ml-auto' : $first}" ng-show="crudSwitchType!=0 && AdminLangService.data.length > 1">
                 <a class="nav-link" ng-click="AdminLangService.toggleSelection(lang)" ng-class="{'active' : AdminLangService.isInSelection(lang.short_code)}" role="tab">
                     <span class="flag flag-{{lang.short_code}}">
                         <span class="flag-fallback">{{lang.name}}</span>
                     </span>
                 </a>
             </li>
+            <?php endif; ?>
         </ul>
     <?php endif; ?>
     <div class="tab-content">
@@ -94,9 +104,16 @@ $this->beginBody();
                 <div class="row mt-2">
                     <div class="col-md-4 col-lg-6 col-xl-6 col-xxxl-8">
                         <div class="input-group mb-2 mr-sm-2 mb-sm-0">
-                            <div class="input-group-addon">
-                                <i class="material-icons">search</i>
+                            <div class="input-group-prepend" ng-hide="config.searchQuery">
+                                <div class="input-group-text">
+                                    <i class="material-icons">search</i>
+                                </div>
                             </div>
+                            <span class="input-group-prepend" ng-show="config.searchQuery" ng-click="config.searchQuery = ''">
+                                <div class="input-group-text">
+                                    <i class="material-icons">clear</i>
+                                </div>
+                            </span>
                             <input class="form-control" ng-model="config.searchQuery" type="text" placeholder="<?= Module::t('ngrest_crud_search_text'); ?>">
                         </div>
                     </div>
@@ -119,22 +136,25 @@ $this->beginBody();
                     </div>
                     <?php endif; ?>
                 </div>
+                <div ng-if="config.tagFilter && serviceResponse._tags" class="mt-3">
+                    <span class="badge mr-1 badge-pill" ng-class="{'badge-primary': isTagFilterActive(tag.id), 'badge-secondary' : !isTagFilterActive(tag.id)}" ng-click="toggleTagFilter(tag.id)" ng-repeat="tag in serviceResponse._tags">{{ tag.name }}</span>
+                </div>
             </div>
             <?php if ($relationCall && $canCreate && $config->getPointer('create')): ?>
             <button type="button" class="btn btn-add ml-3 mt-3" ng-click="switchTo(1)">
-                    <i class="material-icons">add_box</i>
-                    <span><?= Module::t('ngrest_crud_btn_add'); ?></span>
+                <i class="material-icons">add_box</i>
+                <span><?= Module::t('ngrest_crud_btn_add'); ?></span>
             </button>
             <?php endif; ?>
             <small class="crud-counter"><?= Module::t('ngrest_crud_total_count'); ?></small>
-            <div class="table-responsive-wrapper">
-                <table class="table table-hover table-align-middle table-striped mt-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-align-middle table-striped">
                     <thead class="thead-default">
                         <tr>
-                            <?php foreach ($config->getPointer('list') as $item): ?>
+                            <?php foreach ($config->getPointer('list') as $item): if ($this->context->isHiddenInList($item)): continue; endif; ?>
                             <th class="tab-padding-left">
                                 <div class="table-sorter-wrapper" ng-class="{'is-active' : isOrderBy('+<?= $item['name']; ?>') || isOrderBy('-<?= $item['name']; ?>') }">
-                                    <?php if ($config->getDefaultOrderField()): ?>
+                                    <?php if ($config->getDefaultOrderField() && $this->context->isSortable($item)): ?>
                                         <div class="table-sorter table-sorter-up" ng-click="changeOrder('<?= $item['name']; ?>', '-')" ng-class="{'is-sorting': !isOrderBy('-<?= $item['name']; ?>')}">
                                             <span><?= $item['alias']; ?></span>
                                             <i class="material-icons">keyboard_arrow_up</i>
@@ -161,10 +181,10 @@ $this->beginBody();
                             </td>
                         </tr>
                         <tr ng-repeat="(k, item) in items track by k" ng-show="viewToggler[key]" <?php if ($isInline && !$relationCall && $modelSelection): ?>ng-class="{'crud-selected-row': getRowPrimaryValue(item) == <?= $modelSelection?>}"class="crud-selectable-row"<?php endif; ?>>
-                            <?php $i = 0; foreach ($config->getPointer('list') as $item): $i++; ?>
-                                <?php foreach ($this->context->createElements($item, RenderCrud::TYPE_LIST) as $element): ?>
-                                     <td <?php if ($isInline && !$relationCall && $modelSelection !== false): ?>ng-click="parentSelectInline(item)" <?php endif; ?>class="<?= $i != 1 ?: 'tab-padding-left'; ?>"><?= $element['html']; ?></td>
-                                 <?php endforeach; ?>
+                            <?php $i = 0; foreach ($config->getPointer('list') as $item): if ($this->context->isHiddenInList($item)): continue; endif; $i++; ?>
+                                <td ng-class="{'table-info':isRowHighlighted(item)}" <?php if ($isInline && !$relationCall && $modelSelection !== false): ?>ng-click="parentSelectInline(item)" <?php endif; ?>class="<?= $i != 1 ?: 'tab-padding-left'; ?>">
+                                    <?= $this->context->generatePluginHtml($item, RenderCrud::TYPE_LIST); ?>
+                                </td>
                              <?php endforeach; ?>
                             <td class="crud-buttons-column" ng-hide="isLocked(config.tableName, item[config.pk])">
                                 <?php if (count($this->context->getButtons()) > 0): ?>
@@ -207,12 +227,12 @@ $this->beginBody();
             </div>
         </div>
         <?php if ($canCreate && $config->getPointer('create')): ?>
-        	<?= $this->render('_crudform', ['type' => '1', 'renderer' => RenderCrud::TYPE_CREATE, 'isInline' => $isInline, 'relationCall' => $relationCall]); ?>
+        	<?= $this->render($this->context->crudFormView, ['type' => '1', 'renderer' => RenderCrud::TYPE_CREATE, 'isInline' => $isInline, 'relationCall' => $relationCall]); ?>
         <?php endif; ?>
         <?php if ($canUpdate && $config->getPointer('update')): ?>
-        	<?= $this->render('_crudform', ['type' => '2', 'renderer' => RenderCrud::TYPE_UPDATE, 'isInline' => $isInline, 'relationCall' => $relationCall]); ?>
+        	<?= $this->render($this->context->crudFormView, ['type' => '2', 'renderer' => RenderCrud::TYPE_UPDATE, 'isInline' => $isInline, 'relationCall' => $relationCall]); ?>
         <?php endif; ?>
-        <?= $this->render('_awform'); ?>
+        <?= $this->render($this->context->awFormView); ?>
     </div>
 </div>
 <?php $this->endBody(); ?>

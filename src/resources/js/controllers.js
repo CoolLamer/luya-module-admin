@@ -18,8 +18,8 @@
 	 *
 	 * + bool $config.inline Determines whether this crud is in inline mode orno
 	 */
-	zaa.controller("CrudController", ['$scope', '$rootScope', '$filter', '$http', '$sce', '$state', '$timeout', '$injector', '$q', 'AdminLangService', 'AdminToastService', 'CrudTabService', 'ServiceImagesData', 
-	function($scope, $rootScope, $filter, $http, $sce, $state, $timeout, $injector, $q, AdminLangService, AdminToastService, CrudTabService, ServiceImagesData) {
+	zaa.controller("CrudController", ['cfpLoadingBar', '$scope', '$rootScope', '$filter', '$http', '$sce', '$state', '$timeout', '$injector', '$q', 'AdminLangService', 'AdminToastService', 'CrudTabService', 'ServiceImagesData', 
+	function(cfpLoadingBar, $scope, $rootScope, $filter, $http, $sce, $state, $timeout, $injector, $q, AdminLangService, AdminToastService, CrudTabService, ServiceImagesData) {
 
 		$scope.toast = AdminToastService;
 
@@ -135,7 +135,7 @@
 		$scope.exportResponse = false;
 
 		$scope.generateExport = function() {
-			$http.post($scope.config.apiEndpoint + '/export', $scope.exportdata).then(function(response) {
+			$http.post($scope.config.apiEndpoint + '/export?' + $scope.config.apiExportQueryString, $scope.exportdata).then(function(response) {
 				$scope.exportResponse = response.data;
 			});
 		};
@@ -262,13 +262,18 @@
 			if (n.length == 0) {
 				$scope.loadList(1);
 			} else {
+				cfpLoadingBar.start();
 				$scope.searchPromise = $timeout(function() {
-					$http.post($scope.generateUrlWithParams('search'), {query: n}).then(function(response) {
-						$scope.parseResponseQueryToListArray(response);
-					});
-				}, 1000)
+					$scope.reloadCrudList(1);
+				}, 700)
 			}
 		};
+
+		$scope.generateSearchPromise = function(value, page) {
+			return $http.post($scope.generateUrlWithParams('search', page), {query: value}).then(function(response) {
+				$scope.parseResponseQueryToListArray(response);
+			});
+		}
 
 
 		/******* RELATION CALLLS *********/
@@ -281,16 +286,20 @@
 		};
 
 		/**
-		 * Check if a field exists in the parents relation list, if yes hide the field
-		 * for the given form and return the relation call value instead in order to auto store those.
+		 * Check if a field exists in the parents relation list or in a pool config, if yes hide the field
+		 * for the given form and return the relation call or pool config value instead in order to auto store those.
 		 */
-		$scope.checkIfFieldExistsInParentRelation = function(field) {
-			// this call is relation call, okay check for the parent relation defition
+		$scope.checkIfFieldExistsInPopulateCondition = function(field) {
+			// check if value existing in pool config
+			var pools = $scope.config.pools;
+			if (pools.hasOwnProperty(field)) {
+				return pools[field];
+			}
+
+			// this call is relation call, okay check for the parent relation definition
 			if ($scope.config.relationCall) {
 				var relations = $scope.$parent.$parent.config.relations;
-
 				var definition = relations[parseInt($scope.config.relationCall.arrayIndex)];
-
 				var linkDefintion = definition.relationLink;
 
 				if (linkDefintion !== null && linkDefintion.hasOwnProperty(field)) {
@@ -338,12 +347,33 @@
 			});
 		};
 
+		$scope.highlightPkValue = null;
+
+		$scope.highlightTimeout = 5000;
+
+		/**
+		 * Check whether this item (row) is currently highlihted or not.
+		 */
+		$scope.isRowHighlighted = function(item) {
+			var pkValue = $scope.getRowPrimaryValue(item);
+			if (pkValue == $scope.highlightPkValue) {
+				return true;
+			}
+
+			return false;
+		};
+
 		$scope.submitUpdate = function () {
 			$http.put($scope.config.apiEndpoint + '/' + $scope.data.updateId, angular.toJson($scope.data.update, true)).then(function(response) {
 				AdminToastService.success(i18n['js_ngrest_rm_update']);
 				$scope.loadList();
 				$scope.applySaveCallback();
 				$scope.switchTo(0, true);
+				$scope.highlightPkValue = $scope.getRowPrimaryValue(response.data);
+				$timeout(function() {
+					$scope.highlightPkValue = null;
+				}, $scope.highlightTimeout);
+
 			}, function(response) {
 				$scope.printErrors(response.data);
 			});
@@ -356,6 +386,10 @@
 				$scope.applySaveCallback();
 				$scope.switchTo(0, true);
 				$scope.resetData();
+				$scope.highlightPkValue = $scope.getRowPrimaryValue(response.data);
+				$timeout(function() {
+					$scope.highlightPkValue = null;
+				}, $scope.highlightTimeout);
 			}, function(data) {
 				$scope.printErrors(data.data);
 			});
@@ -381,8 +415,8 @@
 		/*** PAGINIATION ***/
 
         $scope.$watch('pager.currentPage', function(newVal, oldVal) {
-            if (newVal != oldVal) {
-                $scope.loadList($scope.pager.currentPage);
+            if (newVal != oldVal && newVal != null) {
+				$scope.loadList($scope.pager.currentPage);
             }
         });
 
@@ -481,16 +515,49 @@
 			return row[$scope.config.pk];
 		};
 
+		$scope.tagsFilterIds = [];
+
+		$scope.isTagFilterActive = function(tagId) {
+			if ($scope.tagsFilterIds.indexOf(tagId) == -1) {
+				return false;
+			}
+
+			return true;
+		};
+
+		$scope.toggleTagFilter = function(tagId) {
+
+			var index = $scope.tagsFilterIds.indexOf(tagId);
+			if (index == -1) {
+				$scope.tagsFilterIds.push(tagId);
+			} else {
+				$scope.tagsFilterIds.splice(index, 1);
+			}
+
+			$scope.loadList();
+		};
+
 		$scope.initServiceAndConfig = function() {
 			var deferred = $q.defer();
-			$http.get($scope.config.apiEndpoint + '/services').then(function(serviceResponse) {
+			$http.get($scope.config.apiEndpoint + '/services?' + $scope.config.apiServicesQueryString).then(function(serviceResponse) {
 				$scope.service = serviceResponse.data.service;
 				$scope.serviceResponse = serviceResponse.data;
 				$scope.evalSettings(serviceResponse.data._settings);
+
+				if ($scope.$parent.notifications && $scope.$parent.notifications.hasOwnProperty($scope.serviceResponse._authId)) {
+					delete $scope.$parent.notifications[$scope.serviceResponse._authId];
+				}
+
 				deferred.resolve();
 			});
 
 			return deferred.promise;
+		};
+
+		$scope.toggleNotificationMute = function() {
+			$http.post($scope.config.apiEndpoint + '/toggle-notification', {'mute': !$scope.serviceResponse._notifcation_mute_state}).then(function(response) {
+				$scope.initServiceAndConfig();
+			});
 		};
 
 		$scope.getFieldHelp = function(fieldName) {
@@ -560,16 +627,28 @@
 			if (pageId !== undefined) {
 				url = url + '&page=' + pageId;
 			}
+
+			var query = $scope.config.searchQuery;
+			if (query) {
+				url = url + '&query=' + query;
+			}
+
+			var ids = $scope.tagsFilterIds.join(',');
+			if (ids) {
+				url = url + '&tags=' + ids;
+			}
 			
 			return url;
 		};
 		
 		// this method is also used withing after save/update events in order to retrieve current selecter filter data.
 		$scope.reloadCrudList = function(pageId) {
-			if (parseInt($scope.config.filter) == 0) {
+			if (parseInt($scope.config.filter) == 0 || $scope.config.filter === null) {
 				if ($scope.config.relationCall) {
 					var url = $scope.generateUrlWithParams('relation-call', pageId);
 					url = url + '&arrayIndex=' + $scope.config.relationCall.arrayIndex + '&id=' + $scope.config.relationCall.id + '&modelClass=' + $scope.config.relationCall.modelClass;
+				} else if ($scope.config.searchQuery) {
+					return $scope.generateSearchPromise($scope.config.searchQuery, pageId);
 				} else {
 					var url = $scope.generateUrlWithParams('list', pageId);
 				}
@@ -579,7 +658,7 @@
 				});
 			} else {
 				var url = $scope.generateUrlWithParams('filter', pageId);
-				var url = url + '&filterName=' + $scope.config.filter;
+				url = url + '&filterName=' + $scope.config.filter;
 				$http.get(url).then(function(response) {
 					$scope.parseResponseQueryToListArray(response);
 				});
@@ -890,6 +969,14 @@
 			})
 		};
 
+		$scope.hasSubUnreadNotificaton = function(item) {
+			if ($scope.$parent.notifications && $scope.$parent.notifications.hasOwnProperty(item.authId)) {
+				return $scope.$parent.notifications[item.authId];
+			}
+
+			return 0;
+		};
+
 		$scope.$on('topMenuClick', function(e) {
 			$scope.currentItem = null;
 		});
@@ -915,8 +1002,8 @@
 	});
 
 	zaa.controller("LayoutMenuController", [
-		'$scope', '$document', '$http', '$state', '$location', '$timeout', '$window', '$filter', 'HtmlStorage', 'CacheReloadService', 'AdminDebugBar', 'LuyaLoading', 'AdminToastService', 'AdminClassService',
-		function ($scope, $document, $http, $state, $location, $timeout, $window, $filter, HtmlStorage, CacheReloadService, AdminDebugBar, LuyaLoading, AdminToastService, AdminClassService) {
+		'$scope', '$document', '$http', '$state','$timeout', '$window', '$filter', 'HtmlStorage', 'CacheReloadService', 'AdminDebugBar', 'LuyaLoading', 'AdminToastService', 'AdminClassService',
+		function ($scope, $document, $http, $state, $timeout, $window, $filter, HtmlStorage, CacheReloadService, AdminDebugBar, LuyaLoading, AdminToastService, AdminClassService) {
 
 		$scope.AdminClassService = AdminClassService;
 
@@ -928,6 +1015,21 @@
 
 		$scope.reload = function() {
 			CacheReloadService.reload();
+		};
+
+		$scope.reload = function(cache) {
+			if (cache == false) {		
+				$window.location.reload();
+			} else {
+				
+				CacheReloadService.reload();
+			}
+		};
+
+		$scope.reloadButtonCall = function(key) {
+			$http.get('admin/api-admin-common/reload-button-call?key=' + key).then(function(response) {
+				AdminToastService.success(response.data.message);
+			});
 		};
 
 		/* Main nav sidebar toggler */
@@ -1033,9 +1135,12 @@
 			$scope.lastKeyStroke = Date.now();
 		});
 
+		$scope.notifications = [];
+
 		(function tick(){
 			$http.post('admin/api-admin-timestamp/index', {lastKeyStroke: $scope.lastKeyStroke}, {ignoreLoadingBar: true}).then(function(response) {
 				$scope.forceReload = response.data.forceReload;
+				$scope.notifications = response.data.notifications;
 				if ($scope.forceReload && !$scope.visibleAdminReloadDialog) {
 					$scope.visibleAdminReloadDialog = true;
 					AdminToastService.confirm(i18n['js_admin_reload'], i18n['layout_btn_reload'], function() {
@@ -1087,6 +1192,18 @@
 		$scope.searchResponse = null;
 
 		$scope.searchPromise = null;
+
+		$scope.hasUnreadNotificaton = function(item) {
+			var authIds = item.authIds;
+			var count = 0;
+			angular.forEach(authIds, function(value) {
+				if (value && $scope.notifications.hasOwnProperty(value)) {
+					count = count + parseInt($scope.notifications[value]);
+				}
+			});
+
+			return count;
+		};
 
 		$scope.$watch(function() { return $scope.searchQuery}, function(n, o) {
 			if (n !== o) {

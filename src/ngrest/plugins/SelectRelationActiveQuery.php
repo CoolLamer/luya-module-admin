@@ -144,7 +144,7 @@ class SelectRelationActiveQuery extends Plugin
         }
         
         // @todo what about: admin/
-        return 'admin/'.$menu['permssionApiEndpoint'];
+        return 'admin/'.$menu['permissionApiEndpoint'];
     }
     
     /**
@@ -170,15 +170,15 @@ class SelectRelationActiveQuery extends Plugin
             $this->writeAttribute($event, $this->emptyListValue);
         } else {
             $model = $this->_query->modelClass;
-            $row = $model::find()->select($this->labelField)->where(['id' => $value])->asArray(true)->one();
+            $row = $model::ngRestFind()->select($this->labelField)->where(['id' => $value])->asArray(true)->one();
 
             if (!empty($row)) {
-                $row = array_map (function($fieldValue, $fieldName) use ($model) {
+                $row = array_map(function ($fieldValue, $fieldName) use ($model) {
                     if ((new $model)->isI18n($fieldName)) {
                         return $this->i18nDecodedGetActive($this->i18nFieldDecode($fieldValue));
                     }
                     return $fieldValue;
-                }, $row, array_keys ($row));
+                }, $row, array_keys($row));
             
                 $this->writeAttribute($event, implode(" ", $row));
             }

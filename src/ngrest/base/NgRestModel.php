@@ -3,16 +3,16 @@
 namespace luya\admin\ngrest\base;
 
 use Yii;
-use yii\base\InvalidConfigException;
-use yii\db\ActiveQuery;
 use yii\db\ActiveRecord;
-
+use yii\db\conditions\OrCondition;
+use yii\base\InvalidConfigException;
+use luya\helpers\Json;
+use luya\admin\helpers\I18n;
 use luya\admin\behaviors\LogBehavior;
 use luya\admin\base\GenericSearchInterface;
 use luya\admin\ngrest\Config;
 use luya\admin\ngrest\ConfigBuilder;
 use luya\admin\base\RestActiveController;
-use yii\db\conditions\OrCondition;
 
 /**
  * NgRest Model.
@@ -67,14 +67,16 @@ abstract class NgRestModel extends ActiveRecord implements GenericSearchInterfac
     public $i18n = [];
 
     protected $ngRestServiceArray = [];
-    
+
     /**
-     * @inheritdoc
+     * Attach behaviors at constructor to prevent override them with call of behaviors() at subclass model.
+     *
+     * @param array $config
      */
-    public function behaviors()
+    public function __construct($config = [])
     {
-        return [
-            'NgRestEventBehvaior' => [
+        $this->attachBehaviors([
+            'NgRestEventBehavior' => [
                 'class' => NgRestEventBehavior::className(),
                 'plugins' => $this->getNgRestConfig()->getPlugins(),
             ],
@@ -82,7 +84,8 @@ abstract class NgRestModel extends ActiveRecord implements GenericSearchInterfac
                 'class' => LogBehavior::className(),
                 'api' => static::ngRestApiEndpoint(),
             ],
-        ];
+        ]);
+        return parent::__construct($config);
     }
     
     /**
@@ -108,38 +111,136 @@ abstract class NgRestModel extends ActiveRecord implements GenericSearchInterfac
     /**
      * {@inheritdoc}
      *
-     * @return \luya\admin\ngrest\base\NgRestActiveQuery
+     * @return NgRestActiveQuery
      */
     public static function find()
     {
         return new NgRestActiveQuery(get_called_class());
     }
+
+    /**
+     * Get an array with the latest primary key value.
+     * 
+     * @return array An array with latest primary key value, for example [10] or if composite keys [10,4]
+     * @since 2.0.0
+     */
+    public static function findLatestPrimaryKeyValue()
+    {
+        $orderBy = [];
+        foreach (static::primaryKey() as $pkName) {
+            $orderBy[$pkName] = SORT_DESC;
+        }
+
+        return self::ngRestFind()->select(static::primaryKey())->orderBy($orderBy)->asArray()->limit(1)->column();
+    }
     
     /**
      * Whether a field is i18n or not.
      *
-     * @param string $fieldName The name of the field which is
+     * @param string $attributeName The name of the field which is
      * @return boolean
      */
-    public function isI18n($fieldName)
+    public function isI18n($attributeName)
     {
-        return in_array($fieldName, $this->i18n) ? true : false;
+        return in_array($attributeName, $this->i18n);
     }
 
     /**
-     * Define an array with filters you can select from the crud list.
+     * Checks whether given attribute is in the list of i18n fields, if so
+     * the field value will be decoded and the value for the current active
+     * language is returned.
+     *
+     * If the attribute is not in the list of attributes values, the value of the attribute is returned. So
+     * its also safe to use this function when dealing with none i18n fields.
+     *
+     * @param string $attributeName The attribute of the ActiveRecord to check and return its decoded i18n value.
+     * @return string A json decoded value from an i18n field.
+     * @since 2.0.0
+     */
+    public function i18nAttributeValue($attributeName)
+    {
+        $value = $this->{$attributeName};
+        if ($this->isI18n($attributeName) && Json::isJson($value)) {
+            return I18n::decodeFindActive($value);
+        }
+
+        return $this->{$attributeName};
+    }
+
+    /**
+     * Returns the decoded i18n value for a set of attributes.
+     *
+     * @param array $attributes An array with attributes to return its value
+     * @return An array with where the key is the attribute name and value is the decoded i18n value
+     * @see {{luya\admin\ngrest\base\NgRestModel::i18nAttributeValue()}}.
+     * @since 2.0.0
+     */
+    public function i18nAttributesValue(array $attributes)
+    {
+        $values = [];
+        foreach ($attributes as $attribute) {
+            $values[$attribute] = $this->i18nAttributeValue($attribute);
+        }
+
+        return $values;
+    }
+
+    /**
+     * Define an array with filters you can select from the CRUD list.
      *
      * ```php
      * return [
-     *     'deleted' => self::find()->where(['is_deleted' => 0]),
-     *     'year2016' => self::find()->where(['between', 'date', 2015, 2016]),
+     *     'deleted' => self::ngRestFind()->andWhere(['is_deleted' => 0]),
+     *     'year2016' => self::ngRestFind()->andWhere(['between', 'date', 2015, 2016]),
      * ];
      * ```
      *
-     * @return array Return an array where key is the name and value is the find() condition for the filters.
+     * > Keep in mind to use andWhere() otherwise an existing where() condition could be overriden.
+     *
+     * @return array Return an array where key is the name and value is the ngRestFind() condition for the filters.
      * @since 1.0.0
      */
     public function ngRestFilters()
+    {
+        return [];
+    }
+
+    /**
+     * Define data pools.
+     *
+     * > The difference between ngRestFilters() and ngRestPools() is that the pool identifer must be provided in the menu component and is not visible in the
+     * > UI, it is like an invisible filter, only available to developers.
+     *
+     * A data pool can be used to retrieve only a subset of data. The identifier for the pool is passed trough to all subrelation
+     * calls. Related models will filter their data by the same pool identifier, if configured accordingly.
+     *
+     * The following is an example of a pool identifier for a table with cars:
+     *
+     * ```php
+     * return [
+     *     'poolAudi' => ['car_brand' => 'Audi'],
+     *     'poolBMW' => ['car_brand' => 'BMW'],
+     * ];
+     * ```
+     *
+     * If the pool identifier is defined in the menu, all subrelation calls will receive the identifer. Thefore, in the above example, you could have a model for
+     * car parts that only returns parts with the same pool identifier in relation calls:
+     *
+     * ```php
+     * return [
+     *     'poolAudi' => ['parts_brand' => 'Audi'],
+     *     'poolBMW' => ['parts_brand' => 'BMW'],
+     * ];
+     * ```
+     *
+     * The identifiers `poolAudi` and `poolBMW` are passed to the `parts` table to only return parts for the given car brand.
+     *
+     * > The pool condition is threaded as where condition, the above example would be `where(['car_brand' => 'BMW'])`. Only hash format expression with "equal" operators are allowed.
+     *
+     * @return array
+     * @since 2.0.0
+     */
+    public function ngRestPools()
     {
         return [];
     }
@@ -228,7 +329,7 @@ abstract class NgRestModel extends ActiveRecord implements GenericSearchInterfac
      * public function ngRestRelations()
      * {
      * 	   return [
-     *          ['label' => 'The Label', 'apiEndpoint' => \path\to\ngRest\Model::ngRestApiEndpoint(), 'dataProvider' => $this->getSales()],
+     *          ['label' => 'The Label', 'targetModel' => Model::class, 'dataProvider' => $this->getSales()],
      *     ];
      * }
      * ```
@@ -251,7 +352,7 @@ abstract class NgRestModel extends ActiveRecord implements GenericSearchInterfac
      * can override this method in order to hide data from the ngRestFind command
      * which populates all data from the database.
      *
-     * An example for hidding deleted news posts from the curd list:
+     * An example for hidding deleted news posts from the crud list:
      *
      * ```php
      * public static function ngRestFind()
@@ -260,13 +361,17 @@ abstract class NgRestModel extends ActiveRecord implements GenericSearchInterfac
      * }
      * ```
      *
-     * + see [[yii\db\ActiveRecord::find()]]
+     * +
      *
-     * @return yii\db\ActiveQuery
+     * > This method will taken for all internal *NOT API USER* related calls. So assuming an API user makes request to the APi
+     * > it will use find() instead of ngRestFind(). If a logged in user will make a request to an API it will take ngRestFind().
+     *
+     * @see {{yii\db\ActiveRecord::find()}}
+     * @return NgRestActiveQuery
      */
     public static function ngRestFind()
     {
-        return Yii::createObject(ActiveQuery::className(), [get_called_class()]);
+        return new NgRestActiveQuery(get_called_class());
     }
 
     /**
@@ -411,7 +516,7 @@ abstract class NgRestModel extends ActiveRecord implements GenericSearchInterfac
                 throw new InvalidConfigException("The NgRestModel '".__CLASS__."' requires at least one primaryKey in order to work.");
             }
             
-            return $keys;
+            return (array) $keys;
         }
 
         return $this->_ngRestPrimaryKey;
@@ -766,22 +871,55 @@ abstract class NgRestModel extends ActiveRecord implements GenericSearchInterfac
             }
             
             // generate relations
-            foreach ($this->ngRestRelations() as $key => $item) {
-                /** @var $item \luya\admin\ngrest\base\NgRestRelationInterface */
-                if (!$item instanceof NgRestRelation) {
-                    if (!isset($item['class'])) {
-                        $item['class'] = 'luya\admin\ngrest\base\NgRestRelation';
-                    }
-                    $item = Yii::createObject($item);
-                }
-                $item->setModelClass($this->className());
-                $item->setArrayIndex($key);
-                $config->setRelation($item);
+            foreach ($this->generateNgRestRelations() as $relation) {
+                $config->setRelation($relation);
             }
-            
+
+            $config->onFinish();
             $this->_config = $config;
         }
 
         return $this->_config;
+    }
+
+    /**
+     * Generate an array with NgRestRelation objects
+     *
+     * @return array
+     * @since 2.0.0
+     */
+    protected function generateNgRestRelations()
+    {
+        $relations = [];
+        // generate relations
+        foreach ($this->ngRestRelations() as $key => $item) {
+            /** @var $item \luya\admin\ngrest\base\NgRestRelationInterface */
+            if (!$item instanceof NgRestRelation) {
+                if (!isset($item['class'])) {
+                    $item['class'] = 'luya\admin\ngrest\base\NgRestRelation';
+                }
+                $item = Yii::createObject($item);
+            }
+            $item->setModelClass($this->className());
+            $item->setArrayIndex($key);
+            
+            $relations[$key] = $item;
+        }
+
+        return $relations;
+    }
+
+    /**
+     * Get the NgRest Relation defintion object.
+     *
+     * @param integer $index
+     * @return NgRestRelationInterface
+     * @since 2.0.0
+     */
+    public function getNgRestRelationByIndex($index)
+    {
+        $relations = $this->generateNgRestRelations();
+
+        return isset($relations[$index]) ? $relations[$index] : false;
     }
 }

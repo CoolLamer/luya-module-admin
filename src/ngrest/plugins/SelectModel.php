@@ -2,7 +2,7 @@
 
 namespace luya\admin\ngrest\plugins;
 
-;
+use Yii;
 use yii\db\ActiveRecordInterface;
 use luya\helpers\ArrayHelper;
 use luya\helpers\StringHelper;
@@ -156,7 +156,7 @@ class SelectModel extends Select
         
         $values = [];
         foreach ($defintion as $field) {
-            $data = $model->$field;
+            $data = $model->i18nAttributeValue($field);
             
             if (is_array($data)) {
                 $data = reset($data);
@@ -211,7 +211,7 @@ class SelectModel extends Select
         
         $class = $this->modelClass;
         
-        $query = $class::find();
+        $query = $class::ngRestFind()->inPool(Yii::$app->request->get('pool'));
         if ($this->where) {
             $query->where($this->where);
         }
@@ -238,7 +238,7 @@ class SelectModel extends Select
     {
         return [
             $this->createCrudLoaderTag($this->modelClass, $ngModel),
-            $this->createFormTag('zaa-select', $id, $ngModel, ['initvalue' => $this->initValue, 'options' => $this->getServiceName('selectdata')]),
+            $this->createFormTag('zaa-select', $id, $ngModel, array_filter(['initvalue' => $this->initValue, 'options' => $this->getServiceName('selectdata')])),
         ];
     }
     
@@ -259,6 +259,6 @@ class SelectModel extends Select
      */
     public function __destruct()
     {
-        self::flushDataInstances();
+        static::flushDataInstances();
     }
 }

@@ -31,11 +31,19 @@ use luya\admin\helpers\Angular;
  * + onExpandFind: Equals to onFind but only for the view api of the model, which means the data which is used for edit.
  * + onSave: Before Update / Create of the new data set.
  *
+ * @property string|array $sortField Sort field defintion (since 2.0.0)
+ *
  * @author Basil Suter <basil@nadar.io>
  * @since 1.0.0
  */
 abstract class Plugin extends Component implements TypesInterface
 {
+    const CREATE_CONTEXT_PREFIX = 'create.';
+
+    const UPDATE_CONTEXT_RPEFXI = 'update.';
+
+    const LIST_CONTEXT_PREFIX = 'item.';
+
     /**
      * @var string The name of the field corresponding to the ActiveRecord (also known as fieldname)
      */
@@ -50,6 +58,13 @@ abstract class Plugin extends Component implements TypesInterface
      * @var boolean Whether the plugin is in i18n context or not.
      */
     public $i18n = false;
+
+    /**
+     * @var boolean Whether this column should be hidden in the list. If the column is hidden in the list the data will be loaded from the api and can
+     * be used by other fields, but its not visible in list view.
+     * @since 2.0.0
+     */
+    public $hideInList = false;
 
     /**
      * @var mixed This value will be used when the i18n decodes the given value but is not set yet, default value.
@@ -132,6 +147,88 @@ abstract class Plugin extends Component implements TypesInterface
         $this->addEvent(NgRestModel::EVENT_AFTER_NGREST_FIND, 'onListFind');
         $this->addEvent(NgRestModel::EVENT_AFTER_NGREST_UPDATE_FIND, 'onExpandFind');
         $this->addEvent(NgRestModel::EVENT_SERVICE_NGREST, 'onCollectServiceData');
+    }
+
+    private $_sortField;
+
+    /**
+     * Setter method for sortField
+     *
+     * @param string|array $field A sort field definition, this can be either a string `firstname` or an array with a defintion or multiple defintions
+     *
+     * ```php
+     * 'sortField' => [
+     *     'asc' => ['fist_name' => SORT_ASC, 'last_name' => SORT_ASC],
+     *     'desc' => ['first_name' => SORT_DESC, 'last_name' => SORT_DESC],
+     * ]
+     * ```
+     *
+     * Or you have an ngrest attribute which does not exists in the database, so you can define the original sorting attribute:
+     *
+     * ```php
+     * 'sortField' => 'field_name_inside_the_table'
+     * ```
+     *
+     * which is equals to
+     *
+     * ```php
+     * 'sortField' => [
+     *    'asc' => ['field_name_inside_the_table' => SORT_ASC],
+     *    'desc' => ['field_name_inside_the_table' => SORT_DESC],
+     * ]
+     * ```
+     *
+     * A very common scenario when define sortField is when display a value from a relation, therefore you need to prepare the data provider
+     * inside the API in order to **join** the relation (joinWith(['relationName])) aftewards you can use the table name
+     *
+     * ```php
+     * 'sortField' => [
+     *      'asc' => ['city_table.name' => SORT_ASC],
+     *      'desc' => ['city_table.name' => SORT_DESC],
+     * ]
+     * ```
+     *
+     * There are situations you might turn of the sorting for the given attribute therefore just sortfield to false:
+     *
+     * ```php
+     * 'sortField' => false,
+     * ```
+     *
+     * @see https://www.yiiframework.com/doc/api/2.0/yii-data-sort#$attributes-detail
+     * @since 2.0.0
+     */
+    public function setSortField($field)
+    {
+        $this->_sortField = $field;
+    }
+
+    /**
+     * Getter method for a sortField defintion.
+     *
+     * If no sortField definition has been set, the plugin attribute name is used.
+     *
+     * @return array
+     * @since 2.0.0
+     */
+    public function getSortField()
+    {
+        if ($this->_sortField === false) {
+            return [];
+        }
+
+        if ($this->_sortField) {
+            //
+            if (is_array($this->_sortField)) {
+                return [$this->name => $this->_sortField];
+            }
+
+            return [$this->name => [
+                'asc' => [$this->_sortField => SORT_ASC],
+                'desc' => [$this->_sortField => SORT_DESC]
+            ]];
+        }
+        
+        return [$this->name];
     }
 
     /**
@@ -269,6 +366,24 @@ abstract class Plugin extends Component implements TypesInterface
         
         return implode(".", $parts);
     }
+
+    /**
+     * Preprends the context name for a certain ng model.
+     *
+     * As the angular attributes have different names in different contexts, this will append the correct context.
+     *
+     * ```php
+     * $this->appendFieldNgModelContext('myfieldname', self::LIST_CONTEXT_PREFIX);
+     * ```
+     *
+     * @param string $field
+     * @param string $context
+     * @return string
+     */
+    protected function appendFieldNgModelContext($field, $context)
+    {
+        return $context . ltrim($field, '.');
+    }
     
     /**
      * Get the ng-show condition from a given ngModel context.
@@ -339,7 +454,7 @@ abstract class Plugin extends Component implements TypesInterface
      */
     public function createCrudLoaderTag($ngrestModelClass, $ngRestModelSelectMode = null, array $options = [])
     {
-        $menu = Yii::$app->adminmenu->getApiDetail($ngrestModelClass::ngRestApiEndpoint());
+        $menu = Yii::$app->adminmenu->getApiDetail($ngrestModelClass::ngRestApiEndpoint(), Yii::$app->request->get('pool'));
         
         if ($menu) {
             if ($ngRestModelSelectMode) {
@@ -367,13 +482,14 @@ abstract class Plugin extends Component implements TypesInterface
      * @param [type] $ngModel
      * @param [type] $values
      * @return void
-     * @since 1.3.0
+     * @since 2.0.0
      */
     public function createSchedulerListTag($ngModel, $values, $dataRow, array $options = [])
     {
         return $this->createTag('luya-schedule', null, array_merge([
             'value' => $ngModel,
             'model-class' => get_class($this->renderContext->getModel()),
+            'title' => $this->alias,
             'attribute-name' => $this->name,
             'attribute-values' => Angular::optionsArrayInput($values),
             'primary-key-value' => 'getRowPrimaryValue('.$dataRow.')',

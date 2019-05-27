@@ -4,6 +4,7 @@ namespace luya\admin\apis;
 
 use Yii;
 use luya\traits\CacheableTrait;
+use luya\admin\Module;
 use luya\admin\models\Property;
 use luya\admin\models\Lang;
 use luya\admin\models\Tag;
@@ -12,6 +13,8 @@ use luya\admin\models\UserLogin;
 use luya\admin\models\Scheduler;
 use yii\data\ActiveDataProvider;
 use yii\web\ForbiddenHttpException;
+use luya\admin\models\Config;
+use yii\web\NotFoundHttpException;
 
 /**
  * Common Admin API Tasks.
@@ -24,28 +27,60 @@ use yii\web\ForbiddenHttpException;
  */
 class CommonController extends RestController
 {
+    /**
+     * @event Event A global event which is triggered after the admin flush cache (reload) button is clicked.
+     * @since 2.0.0
+     */
+    const EVENT_FLUSH_CACHE = 'flushCache';
+
     use CacheableTrait;
+
+    /**
+     * Run the callback function of a reload button configure in {{luya\admin\Module::$reloadButtons}}
+     *
+     * @param integer|string $key The array key from reload buttons array
+     * @return array Returns an array with response, button and message
+     * @since 2.0.0
+     */
+    public function actionReloadButtonCall($key)
+    {
+        $button = array_key_exists($key, $this->module->reloadButtons) ? $this->module->reloadButtons[$key] : false;
+
+        if (!$button) {
+            throw new NotFoundHttpException("Unable to find the given reload button.");
+        }
+
+        $response = call_user_func($button->callback, $button);
+
+        return [
+            'response' => $response,
+            'button' => $button,
+            'message' => $button->response ? $button->response : Module::t('admin_button_execute', ['label' => $button->originalLabel]),
+        ];
+    }
     
     /**
      * Get all log entries for a given scheulder model with primary key.
      *
-     * @param [type] $model
-     * @param [type] $pk
-     * @return void
-     * @since 1.3.0
+     * @param string $model The namespace to the model
+     * @param integer $pk The primary key
+     * @return ActiveDataProvider
+     * @since 2.0.0
      */
     public function actionSchedulerLog($model, $pk)
     {
         return new ActiveDataProvider([
             'query' => Scheduler::find()->where(['model_class' => $model, 'primary_key' => $pk]),
-            'sort'=> ['defaultOrder' => ['schedule_timestamp' => SORT_DESC]]
+            'sort'=> ['defaultOrder' => ['schedule_timestamp' => SORT_ASC]],
+            'pagination' => false,
         ]);
     }
 
     /**
      * Add a task to the scheduler.
      *
-     * @return void
+     * @return array
+     * @since 2.0.0
      */
     public function actionSchedulerAdd()
     {
@@ -61,11 +96,28 @@ class CommonController extends RestController
 
             // if its a "now" job, run the internal worker now so the log table is refreshed immediately
             Yii::$app->adminqueue->run(false);
-
+            Config::set(Config::CONFIG_QUEUE_TIMESTAMP, time());
             return $model;
         }
 
         return $this->sendModelError($model);
+    }
+
+    /**
+     * Remove a job for a given ID.
+     *
+     * @return boolean
+     * @since 2.0.0
+     */
+    public function actionSchedulerDelete($id)
+    {
+        $job = Scheduler::findOne($id);
+
+        if ($job) {
+            return $job->delete();
+        }
+
+        return false;
     }
 
     /**
@@ -74,7 +126,7 @@ class CommonController extends RestController
      * This response differs to the admin-api-tag as returns all tags without pagination.
      *
      * @return array
-     * @since 1.3.0
+     * @since 2.0.0
      */
     public function actionTags()
     {
@@ -160,6 +212,8 @@ class CommonController extends RestController
         $user = Yii::$app->adminuser->identity;
         $user->updateAttributes(['force_reload' => false]);
     
+        Yii::$app->trigger(self::EVENT_FLUSH_CACHE);
+
         return true;
     }
     

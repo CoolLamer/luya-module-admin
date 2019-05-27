@@ -18,10 +18,11 @@ use luya\helpers\FileHelper;
 use yii\web\BadRequestHttpException;
 use yii\web\NotFoundHttpException;
 use luya\admin\models\StorageImage;
-use luya\admin\file\Item;
-use luya\helpers\ArrayHelper;
 use yii\data\ActiveDataProvider;
 use luya\admin\models\TagRelation;
+use luya\admin\traits\TaggableTrait;
+use luya\admin\storage\BaseFileSystemStorage;
+use luya\admin\events\FileEvent;
 
 /**
  * Filemanager and Storage API.
@@ -69,7 +70,7 @@ class StorageController extends RestController
                 $folders[$key]['subfolder'] = Yii::$app->storage->getFolder($folder->id)->hasChild();
             }
             return $folders;
-        }, 0, new DbDependency(['sql' => 'SELECT MAX(id) FROM admin_storage_folder WHERE is_deleted=false']));
+        }, 0, new DbDependency(['sql' => 'SELECT MAX(id) FROM {{%admin_storage_folder}} WHERE is_deleted=false']));
     }
     
     /**
@@ -85,7 +86,11 @@ class StorageController extends RestController
             ->with(['images.file']);
 
         if (!empty($search)) {
-            $query->andFilterWhere(['or', ['like', 'name_original', $search], ['like', 'caption', $search]]);
+            $query->andFilterWhere(['or',
+                ['like', 'name_original', $search],
+                ['like', 'caption', $search],
+                ['=', 'id', $search],
+            ]);
         } else {
             $query->andWhere(['folder_id' => $folderId]);
         }
@@ -103,7 +108,7 @@ class StorageController extends RestController
      * If a relation exists, remove, otherwise add.
      *
      * @return The array of associated tags for the given file.
-     * @since 1.3.0
+     * @since 2.0.0
      */
     public function actionToggleFileTag()
     {
@@ -116,7 +121,7 @@ class StorageController extends RestController
             throw new NotFoundHttpException("Unable to find the given file to toggle the tag.");
         }
     
-        $relation = TagRelation::find()->where(['table_name' => StorageFile::tableName(), 'pk_id' => $fileId, 'tag_id' => $tagId])->one();
+        $relation = TagRelation::find()->where(['table_name' => TaggableTrait::cleanBaseTableName(StorageFile::tableName()), 'pk_id' => $fileId, 'tag_id' => $tagId])->one();
 
         if ($relation) {
             $relation->delete();
@@ -125,7 +130,7 @@ class StorageController extends RestController
         }
 
         $model = new TagRelation();
-        $model->table_name = StorageFile::tableName();
+        $model->table_name = TaggableTrait::cleanBaseTableName(StorageFile::tableName());
         $model->pk_id = $fileId;
         $model->tag_id = $tagId;
 
@@ -253,6 +258,8 @@ class StorageController extends RestController
         $model->attributes = $post;
         
         if ($model->update(true, ['name_original', 'inline_disposition']) !== false) {
+            Yii::$app->storage->trigger(BaseFileSystemStorage::FILE_UPDATE_EVENT, new FileEvent(['file' => $model]));
+            
             $this->flushApiCache($model->folder_id, $pageId);
             return $model;
         }
@@ -292,25 +299,27 @@ class StorageController extends RestController
     /**
      * Upload an image to the filemanager.
      *
-     * @return array
+     * @return array An array with
+     * - error: Whether an error occured or not.
+     * - id: The id of the image
+     * - image: The image object (since 2.0)
      */
     public function actionImageFilter()
     {
         $this->checkRouteAccess(self::PERMISSION_ROUTE);
-        try {
-            $create = Yii::$app->storage->createImage(Yii::$app->request->post('fileId', null), Yii::$app->request->post('filterId', null), true);
-            if ($create) {
-                return [
-                    'error' => false,
-                    'id' => $create->id,
-                ];
-            }
-        } catch (Exception $err) {
-            return $this->sendArrayError([
-                'error' => true,
-                'message' => Module::t('api_storage_image_upload_error'),
-            ]);
+        $image = Yii::$app->storage->createImage(Yii::$app->request->post('fileId', null), Yii::$app->request->post('filterId', null));
+        if ($image) {
+            return [
+                'error' => false,
+                'id' => $image->id,
+                'image' => $image
+            ];
         }
+
+        return $this->sendArrayError([
+            'error' => true,
+            'message' => Module::t('api_storage_image_upload_error', ['error' => 'Unable to create the filter for the given image. Maybe the file source is not readable.']),
+        ]);
     }
     
     /**
@@ -350,7 +359,11 @@ class StorageController extends RestController
                 
                 if (Storage::replaceFile($file->systemFileName, $newFileSource, $raw['name'])) {
                     foreach (StorageImage::find()->where(['file_id' => $file->id])->all() as $img) {
-                        $removal = Storage::removeImage($img->id, false);
+                        // remove the source
+                        if ($img->deleteSource()) {
+                            // recreate image filters
+                            $img->imageFilter($img->filter_id, false);
+                        }
                     }
                     
                     // calculate new file files based on new file

@@ -1,21 +1,59 @@
 # CHANGELOG
 
-All notable changes to this project will be documented in this file. This project make usage of the [Yii Versioning Strategy](https://github.com/yiisoft/yii2/blob/master/docs/internals/versions.md). In order to read more about upgrading and BC breaks have a look at the [UPGRADE Document](UPGRADE.md).
+All notable changes to this project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org/).
+In order to read more about upgrading and BC breaks have a look at the [UPGRADE Document](UPGRADE.md).
 
-## 1.3 (in progress)
+## 2.0.0 (27. May 2019)
 
 This release contains new migrations and requires to run the `migrate` command after updating. Check the [UPGRADE Document](UPGRADE.md).
 
-## Changed
+### Changed
 
++ [#263](https://github.com/luyadev/luya-module-admin/issues/263) Moved angularjs-datepicker from vendor to vendorlibs. Fixed the "today" issue & updated colors.
++ [#293](https://github.com/luyadev/luya-module-admin/issues/293) Added new request log table for api calls in order to make metrics about request, this must be enabled in the admin area.
++ [#46](https://github.com/luyadev/luya-module-admin/issues/46) Updated bootstrap to 4.3.1.
++ [#268](https://github.com/luyadev/luya-module-admin/issues/268) Deprecated classes, methods and properties has been removed.
++ [#261](https://github.com/luyadev/luya-module-admin/issues/261) Add ngRestFind() for none $is_api_user Users.
 + [#210](https://github.com/luyadev/luya-module-admin/issues/210) New tag translation option.
-+ [#140](https://github.com/luyadev/luya-module-admin/issues/140) Generic Scheduler with Yii Queue integration.
++ [#140](https://github.com/luyadev/luya-module-admin/issues/140) Generic Scheduler with Yii Queue integration. The queue is triggered by fake job (frontend) or via cronjob console command.
++ [#61](https://github.com/luyadev/luya-module-admin/issues/61) The `initvalue` attribute of Select plugins is now by default `null` instead of `0`. This is needed cause the require validator won't handle `0` as empty until you configure `isEmpty` option.
++ [#260](https://github.com/luyadev/luya-module-admin/issues/260) All tables and queries include database prefix option `{{%}}`.
++ [#104](https://github.com/luyadev/luya-module-admin/issues/104) NgRestModel behaviors are attached in constructor instead of behaviors() method.
 
-## Added
+### Fixed
 
++ [#302](https://github.com/luyadev/luya-module-admin/issues/302) Updated spacing for luya-subnav + content.
++ [#245](https://github.com/luyadev/luya-module-admin/issues/245) Fixed highlight of rows after update and new insert in CRUD.
++ [#294](https://github.com/luyadev/luya-module-admin/issues/294) Fixed bug when replace a file with images.
++ [#291](https://github.com/luyadev/luya-module-admin/issues/291) Fixed search and sub folder behavior in file manager.
++ [#278](https://github.com/luyadev/luya-module-admin/pull/278) ToggleStatus plugin initValue=1 not displayed at frontend
++ [#62](https://github.com/luyadev/luya-module-admin/issues/62) Two-digit display of minutes in datetime fields.
++ [#239](https://github.com/luyadev/luya-module-admin/issues/239) Hide i18n flags when no i18n field is configured, also hide in list view as its not possible to toggle in this context.
++ [#273](https://github.com/luyadev/luya-module-admin/issues/273) Fixed a bug where canceling of the folder renaming where not restoring the old folder name.
++ [#258](https://github.com/luyadev/luya-module-admin/issues/258) NgRest Crud search with pagination problem fixed. 
++ [#226](https://github.com/luyadev/luya-module-admin/issues/226) Fixed search indicator
++ [#267](https://github.com/luyadev/luya-module-admin/pull/267) I18n::decodeFindActive returned empty value for explicitly selected lang
++ [#275](https://github.com/luyadev/luya-module-admin/issues/275) Search for file IDs in file manager.
+
+### Added
+
++ [#300](https://github.com/luyadev/luya-module-admin/issues/300) Added new reload button option and split cache and window reload buttons into two.
++ [#240](https://github.com/luyadev/luya-module-admin/issues/240) New notification system for visited CRUD views.
++ [#213](https://github.com/luyadev/luya-module-admin/issues/213) Added noscript message and <=IE9 warning.
++ [#288](https://github.com/luyadev/luya-module-admin/issues/288) Filemanager add file id in tooltip.
++ [#225](https://github.com/luyadev/luya-module-admin/issues/225) Added configuration for default behavior with inline disposition when uploading new files.
++ [#289](https://github.com/luyadev/luya-module-admin/issues/289) Added new input field methods checkbox, checkboxList, radioList, imageUpload, fileUpload, date and datetime picker.
++ [#283](https://github.com/luyadev/luya-module-admin/pull/283) The possibility to extend standard ngrest crud views
++ [#236](https://github.com/luyadev/luya-module-admin/issues/236) Added multiple menu entries and CRUD view for same models (data pools).
++ [#228](https://github.com/luyadev/luya-module-admin/issues/228) New `sortField` attribute option for plugins.
++ [#94](https://github.com/luyadev/luya-module-admin/issues/94) Required CRUD fields are now highlight as bold text.
++ [#277](https://github.com/luyadev/luya-module-admin/issues/277) Using [unglue.io](https://unglue.io) to compile admin resources.
++ [#205](https://github.com/luyadev/luya-module-admin/issues/205) CRUD search works now in filters and relation calls, sorting and pagination works in searching.
 + [#216](https://github.com/luyadev/luya-module-admin/issues/216) File manager file detail view provides option to tag files.
 + [#259](https://github.com/luyadev/luya-module-admin/pull/259) SelectRelationActiveQuery supports related i18n label fields
 + [#253](https://github.com/luyadev/luya-module-admin/pull/253) Added command action to reset password for users via cli.
++ [#270](https://github.com/luyadev/luya-module-admin/pull/270) Custom date format for date plugin in listing.
++ [#271](https://github.com/luyadev/luya-module-admin/pull/271) Proxy with different database connection.
 
 ## 1.2.3 (21. November 2018)
 

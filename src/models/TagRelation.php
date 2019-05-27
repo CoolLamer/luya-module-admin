@@ -25,7 +25,7 @@ final class TagRelation extends ActiveRecord
      */
     public static function tableName()
     {
-        return 'admin_tag_relation';
+        return '{{%admin_tag_relation}}';
     }
 
     /**
@@ -35,7 +35,7 @@ final class TagRelation extends ActiveRecord
     {
         return [
             [['tag_id', 'pk_id'], 'integer'],
-            [['tag_id', 'table_name', 'pk_id'], 'safe'],
+            [['tag_id', 'table_name', 'pk_id'], 'unique', 'targetAttribute' => ['tag_id', 'table_name', 'pk_id']],
         ];
     }
 

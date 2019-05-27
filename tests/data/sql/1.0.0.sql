@@ -506,6 +506,7 @@ DROP TABLE IF EXISTS `admin_tag`;
 CREATE TABLE `admin_tag` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(120) NOT NULL,
+  `translation` text,
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
@@ -560,6 +561,7 @@ CREATE TABLE `admin_user` (
   `password_salt` varchar(255) DEFAULT NULL,
   `auth_token` varchar(255) DEFAULT NULL,
   `is_deleted` tinyint(1) DEFAULT '0',
+  `is_api_user` tinyint(1) DEFAULT '0',
   `secure_token` varchar(40) DEFAULT NULL,
   `secure_token_timestamp` int(11) DEFAULT '0',
   `force_reload` tinyint(1) DEFAULT '0',
@@ -576,7 +578,7 @@ CREATE TABLE `admin_user` (
 
 LOCK TABLES `admin_user` WRITE;
 /*!40000 ALTER TABLE `admin_user` DISABLE KEYS */;
-INSERT INTO `admin_user` VALUES (1,'John','Doe',1,'test@luya.io','$2y$13$7TZy10K41AwgkIjn51OwFuHnafecDt.B5w/2RrA9frxExOh6biWRG','sWuayGA8P5PlEQBUirj0-BTdKimgQSj1',NULL,0,NULL,0,0,NULL,NULL);
+INSERT INTO `admin_user` VALUES (1,'John','Doe',1,'test@luya.io','$2y$13$7TZy10K41AwgkIjn51OwFuHnafecDt.B5w/2RrA9frxExOh6biWRG','sWuayGA8P5PlEQBUirj0-BTdKimgQSj1',NULL,0,0,NULL,0,0,NULL,NULL);
 /*!40000 ALTER TABLE `admin_user` ENABLE KEYS */;
 UNLOCK TABLES;
 

@@ -637,7 +637,13 @@
 
     			$scope.toggleWindow = function() {
     				if ($scope.input.showWindow) {
-    					var url = $scope.api+'/?inline=1';
+
+                        if ($scope.api.indexOf('?') > -1) {
+                            var url = $scope.api+'&inline=1';
+                        } else {
+                            var url = $scope.api+'?inline=1';
+                        }
+
     					var modelSelection = parseInt($scope.modelSelection);
     					if (modelSelection) {
     						url = url + '&modelSelection=' + $scope.modelSetter;
@@ -688,8 +694,15 @@
     			"id": "@id"
     		},
     		controller: ['$scope', function($scope) {
-    			$scope.content = null;
-    			$http.get($scope.api+'/?inline=1&relation='+$scope.id+'&arrayIndex='+$scope.arrayIndex+'&modelClass='+$scope.modelClass).then(function(response) {
+                $scope.content = null;
+                
+                if ($scope.api.indexOf('?') > -1) {
+                    var url = $scope.api+'&inline=1';
+                } else {
+                    var url = $scope.api+'?inline=1';
+                }
+
+    			$http.get(url + '&relation='+$scope.id+'&arrayIndex='+$scope.arrayIndex+'&modelClass='+$scope.modelClass).then(function(response) {
 					$scope.content = $sce.trustAsHtml(response.data);
     			});
     		}],
@@ -874,6 +887,9 @@
     	}
     });
 
+    /**
+     * <zaa-link model="linkinfo" />
+     */
     zaa.directive("zaaLink", ['$filter', function($filter){
         return {
             restrict: "E",
@@ -1514,7 +1530,7 @@
                             '</div>' +
                             '<div class="form-side">' +
                                 '<div class="form-check">' +
-                                    '<input id="{{id}}" ng-true-value="{{valueTrue}}" ng-false-value="{{valueFalse}}" ng-model="model" type="checkbox" class="form-check-input-standalone" />' +
+                                    '<input id="{{id}}" ng-true-value="{{valueTrue}}" ng-false-value="{{valueFalse}}" ng-model="model" type="checkbox" class="form-check-input-standalone" ng-checked="model == valueTrue" />' +
                                     '<label for="{{id}}"></label>' +
                                 '</div>' +
                             '</div>' +
@@ -1602,8 +1618,10 @@
                             '<div class="form-side">' +
 
                                 '<div class="input-group mb-3">' +
-                                    '<div class="input-group-addon">' +
-                                        '<i class="material-icons">search</i>' +
+                                    '<div class="input-group-prepend">' +
+                                        '<div class="input-group-text">' +
+                                            '<i class="material-icons">search</i>' +
+                                        '</div>' +        
                                     '</div>' +
                                     '<input class="form-control" type="text" ng-change="filtering()" ng-model="searchString" placeholder="'+i18n['ngrest_crud_search_text']+'">' +
 
@@ -1650,8 +1668,8 @@
             			var datep = new Date(n*1000);
             			$scope.pickerPreselect = datep;
             			$scope.date = $filter('date')(datep, 'dd.MM.yyyy');
-            			$scope.hour = $filter('date')(datep, 'H');
-            			$scope.min = $filter('date')(datep, 'm');
+            			$scope.hour = $filter('date')(datep, 'HH');
+            			$scope.min = $filter('date')(datep, 'mm');
             		} else {
             			$scope.date = null;
             			$scope.model = null;
@@ -1684,7 +1702,7 @@
         						}
 
 		        				var en = res[1] + "/" + res[0] + "/" + res[2] + " " + $scope.hour + ":" + $scope.min;
-		        				$scope.model = (Date.parse(en)/1000);
+                                $scope.model = (Date.parse(en)/1000);
 		        				$scope.datePickerToggler = false;
             				}
             			}
@@ -1739,20 +1757,26 @@
                             '<div class="form-side form-inline datepicker-wrapper">' +
                                 '<datepicker date-set="{{pickerPreselect.toString()}}" date-week-start-day="1" datepicker-toggle="false" datepicker-show="{{datePickerToggler}}" date-format="dd.MM.yyyy">' +
                                         '<input class="form-control datepicker-date-input" ng-model="date" type="text" ng-focus="openDatePicker()" />' +
-                                        '<div class="input-group-addon" ng-click="toggleDatePicker()">' +
-                                            '<i class="material-icons" ng-hide="datePickerToggler">date_range</i>' +
-                                            '<i class="material-icons" ng-show="datePickerToggler">close</i>' +
+                                        '<div class="input-group-append" ng-click="toggleDatePicker()">' +
+                                            '<div class="input-group-text">' +
+                                                '<i class="material-icons" ng-hide="datePickerToggler">date_range</i>' +
+                                                '<i class="material-icons" ng-show="datePickerToggler">close</i>' +
+                                            '</div>' + 
                                         '</div>' +
                                 '</datepicker>' +
             	                '<div ng-show="model!=null && date!=null" class="hour-selection">' +
                                     '<div class="input-group">' +
-                                        '<div class="input-group-addon">' +
-                                            '<i class="material-icons">access_time</i>' +
+                                        '<div class="input-group-prepend">' +
+                                            '<div class="input-group-text">' +
+                                                '<i class="material-icons">access_time</i>' +
+                                            '</div>' +
                                         '</div>' +
                                         '<input class="form-control zaa-datetime-hour-input" type="text" ng-model="hour" ng-change="autoRefactor()" />' +
                                     '</div>' +
                                     '<div class="input-group">' +
-                                        '<div class="input-group-addon zaa-datetime-time-colon">:</div>' +
+                                        '<div class="input-group-prepend zaa-datetime-time-colon">' +
+                                            '<div class="input-group-text">:</div>' +
+                                        '</div>' +
                                         '<input class="form-control zaa-datetime-minute-input" type="text" ng-model="min" ng-change="autoRefactor()" />' +
                                     '</div>' +
             	                '</div>' +
@@ -1799,7 +1823,7 @@
             			var res = n.split(".");
             			if (res.length == 3) {
             				if (res[2].length == 4) {
-            					var en = res[1] + "/" + res[0] + "/" + res[2];
+                                var en = res[1] + "/" + res[0] + "/" + res[2];
 		        				$scope.model = (Date.parse(en)/1000);
 		        				$scope.datePickerToggler = false;
             				}
@@ -1851,9 +1875,11 @@
                             '<div class="form-side datepicker-wrapper">' +
                                 '<datepicker date-set="{{pickerPreselect.toString()}}" date-week-start-day="1" datepicker-toggle="false" datepicker-show="{{datePickerToggler}}" date-format="dd.MM.yyyy">' +
                                     '<input class="form-control datepicker-date-input" ng-model="date" type="text" ng-focus="openDatePicker()" />' +
-                                    '<div class="input-group-addon" ng-click="toggleDatePicker()">' +
-                                        '<i class="material-icons" ng-hide="datePickerToggler">date_range</i>' +
-                                        '<i class="material-icons" ng-show="datePickerToggler">close</i>' +
+                                    '<div class="input-group-append" ng-click="toggleDatePicker()">' +
+                                        '<div class="input-group-text">' +
+                                            '<i class="material-icons" ng-hide="datePickerToggler">date_range</i>' +
+                                            '<i class="material-icons" ng-show="datePickerToggler">close</i>' +
+                                        '</div>' +
                                     '</div>' +
                                 '</datepicker>' +
                                 '<div ng-show="model && getIsResetable()"><button type="button" ng-click="reset()" class="ml-2 btn btn-icon btn-cancel"></nutton></div>' +
@@ -2447,10 +2473,9 @@
                 $scope.fileinfo = null;
 
                 $scope.$watch('fileId', function(n, o) {
-                	if (n == 0 || n == null || n == undefined || n == o) {
+                	if (n == 0 || n == null || n == undefined) {
                 		return;
                 	}
-                	
                 	ServiceFilesData.getFile(n).then(function(file) {
                 		$scope.fileinfo = file;
                 	}, function() {
@@ -2459,7 +2484,7 @@
                 });
     		}],
     		template: function() {
-                return '<div ng-show="fileinfo!==null">{{ fileinfo.name }}</div>';
+                return '<a ng-show="fileinfo" href="{{ fileinfo.source }}" target="_blank">{{ fileinfo.name_original }}</a>';
             }
     	}
     });
@@ -2566,7 +2591,7 @@
             		$scope.modal.state = !$scope.modal.state;
                 };
 
-            	$scope.$watch(function() { return $scope.ngModel }, function(n, o) {
+            	$scope.$watch(function() { return $scope.ngModel }, function(n) {
             		if (n == null || n == undefined || !angular.isNumber(n)) {
             			return null;
             		}
@@ -2707,8 +2732,8 @@
                 onlyImages : '@onlyImages'
             },
             controller : [
-            	'$scope', '$http', '$filter', '$timeout', '$q', 'Upload', 'ServiceFoldersData', 'ServiceFilesData', 'LuyaLoading', 'AdminToastService', 'ServiceFoldersDirecotryId', 'ServiceAdminTags', 
-            	function($scope, $http, $filter, $timeout, $q, Upload, ServiceFoldersData, ServiceFilesData, LuyaLoading, AdminToastService, ServiceFoldersDirecotryId, ServiceAdminTags) {
+            	'$scope', '$http', '$filter', '$timeout', '$rootScope', '$q', 'cfpLoadingBar', 'Upload', 'ServiceFoldersData', 'ServiceFilesData', 'LuyaLoading', 'AdminToastService', 'ServiceFoldersDirecotryId', 'ServiceAdminTags', 
+            	function($scope, $http, $filter, $timeout, $rootScope, $q, cfpLoadingBar, Upload, ServiceFoldersData, ServiceFilesData, LuyaLoading, AdminToastService, ServiceFoldersDirecotryId, ServiceAdminTags) {
 
                 // ServiceFoldersData inheritance
 
@@ -2740,9 +2765,39 @@
                 // load files data for a given folder id
                 $scope.$watch('currentFolderId', function(folderId) {
                 	if (folderId !== undefined) {
+                        // generate the current pare info based on folder
+                        $scope.generateFolderInheritance(folderId);
                 		$scope.getFilesForPageAndFolder(folderId, 1);
                 	}
                 });
+
+                $scope.folderInheritance = [];
+
+                $scope.generateFolderInheritance = function(folderId) {
+                    $scope.folderInheritance = [];
+                    $scope.findFolderInheritance(folderId);
+                }
+
+                $scope.findFolderInheritance = function(folderId) {
+                    if ($scope.foldersData.hasOwnProperty(folderId)) {
+                        var parent = $scope.foldersData[folderId];
+                        $scope.folderInheritance.push(parent);
+                        if (parent && parent.parentId) {
+                            $scope.findFolderInheritance(parent.parentId);
+                        }
+                    }
+                }
+
+                $scope.hasFolderActiveChild = function(folderId) {
+                    var value = false;
+                    angular.forEach($scope.folderInheritance, function(item) {
+                        if (item.id == folderId) {
+                            value = true;
+                        }
+                    });
+
+                    return value;
+                }
 
                 $scope.$watch('currentPageId', function(pageId, oldPageId) {
                     if (pageId !== undefined && pageId != oldPageId) {
@@ -2759,10 +2814,9 @@
                 	});
                 };
 
-                $scope.createUrl = function(folderId, pageId, sortField, search)
-                {
+                $scope.createUrl = function(folderId, pageId, sortField, search) {
                     return 'admin/api-admin-storage/data-files?folderId='+folderId+'&page='+pageId+'&expand=createThumbnail,createThumbnailMedium,isImage,sizeReadable&sort=' + sortField + '&search=' + search;
-                }
+                };
 
                 $scope.filesResponseToVars = function(response) {
                     $scope.filesData = response.data;
@@ -2778,13 +2832,13 @@
                 
                 $scope.getFilesForCurrentPage = function() {
                 	return $scope.getFilesForPageAndFolder($scope.currentFolderId, $scope.currentPageId);
-                }
+                };
                 
                 // ServiceFolderId
 
                 $scope.currentFolderId = ServiceFoldersDirecotryId.folderId;
 
-                $scope.$on('FoldersDirectoryId', function(event, folderId) {
+                $rootScope.$on('service:FoldersDirectoryId', function(event, folderId) {
                 	$scope.currentFolderId = folderId;
                 });
 
@@ -2924,10 +2978,9 @@
                 $scope.selectedFiles = [];
 
                 $scope.toggleSelectionAll = function() {
-                	var files = $filter('filemanagerfilesfilter')($scope.filesData, $scope.currentFolderId, $scope.onlyImages);
-                	files.forEach(function(value, key) {
+                	$scope.filesData.forEach(function(value, key) {
                 		$scope.toggleSelection(value);
-                	})
+                	});
                 }
 
                 $scope.toggleSelection = function(file) {
@@ -2963,10 +3016,12 @@
                 	if (!newFolderName) {
                 		return;
                 	}
-                    $http.post('admin/api-admin-storage/folder-create', { folderName : newFolderName , parentFolderId : $scope.currentFolderId }).then(function() {
-                        $scope.foldersDataReload().then(function() {
+                    $http.post('admin/api-admin-storage/folder-create', { folderName : newFolderName , parentFolderId : $scope.currentFolderId }).then(function(response) {
+                        var folderId = response.data;
+                        $scope.foldersDataReload().then(function(response) {
                             $scope.folderFormToggler();
                             $scope.newFolderName = null;
+                            $scope.changeCurrentFolderId(folderId);
                         })
                     });
                 };
@@ -2979,20 +3034,22 @@
 
                 $scope.searchQuery = '';
                 $scope.searchPromise = null;
+                $scope.searchLoading = false;
                 
                 $scope.runSearch = function() {
                     if ($scope.searchQuery.length > 0) {
+                        $scope.searchLoading = true;
+                        cfpLoadingBar.start();
                         $timeout.cancel($scope.searchPromise);
                         $scope.searchPromise = $timeout(function() {
-                            $scope.getFilesForCurrentPage();
-                            /*
-                            $http.get('admin/api-admin-storage/search?query=' + $scope.searchQuery).then(function(response) {
-                                $scope.filesResponseToVars(response);
+                            $scope.getFilesForCurrentPage().then(function() {
+                                $scope.searchLoading = false;
                             });
-                            */
                         }, 1000);
                     } else {
-                        $scope.getFilesForCurrentPage();
+                        $scope.getFilesForCurrentPage().then(function() {
+                            $scope.searchLoading = false;
+                        });
                     }
                 };
 
@@ -3029,9 +3086,15 @@
                 $scope.folderDeleteForm = false;
 
                 $scope.folderDeleteConfirmForm = false;
-                
+
                 $scope.updateFolder = function(folder) {
-                    $http.post('admin/api-admin-storage/folder-update?folderId=' + folder.id, {name : folder.name });
+                    $http.post('admin/api-admin-storage/folder-update?folderId=' + folder.id, {name : folder.name }).then(function(transport) {
+                        AdminToastService.success(i18n['js_dir_manager_rename_success']);
+                    });
+                };
+
+                $scope.cancelFolderEdit = function(folder, oldName) {
+                    folder.name = oldName;
                 };
                 
                 $scope.deleteFolder = function(folder) {
@@ -3271,10 +3334,20 @@
                 pageCount: '='
             },
             controller: ['$scope', '$timeout', function($scope, $timeout) {
+                $scope.sliderPage = 1;
+                $scope.userInputPage = 1;
+
                 // Watch for pageCOunt changes and refresh ceil value for slider
                 $scope.$watch('pageCount', function(newValue) {
                     if (newValue !== undefined) {
                         $scope.sliderOptions.ceil = newValue;
+                    }
+                });
+                $scope.$watch('userInputPage', function(newValue, oldValue) {
+                    if(newValue >= $scope.sliderOptions.floor && newValue <= $scope.sliderOptions.ceil) {
+                        $scope.sliderPage = newValue;
+                        $scope.currentPage = newValue;
+                        $scope.$broadcast('rzSliderForceRender'); // Probably not the best idea, but for now it works.
                     }
                 });
 
@@ -3295,14 +3368,21 @@
                     onEnd: function(sliderId, modelValue) {
                         // Update the currentPage once the user stopped dragging (or on click)
                         $scope.currentPage = modelValue;
+                        $scope.userInputPage = modelValue;
                     } 
                 };
 
                 $timeout(function() {
-                    $scope.$broadcast('rzSliderForceRender')
+                    $scope.$broadcast('rzSliderForceRender');
                 });
 
             }],
-            template: '<rzslider rz-slider-model="1" rz-slider-options="sliderOptions" ng-hide="pageCount<=1"></rzslider>',
+            template: '<rzslider rz-slider-model="sliderPage" rz-slider-options="sliderOptions" ng-hide="pageCount<=1"></rzslider>' +
+                    '<div class="input-group mt-2" style="max-width: 150px" ng-show="sliderOptions.ceil >= 30">' +
+                        '<div class="input-group-prepend">' +
+                            '<div class="input-group-text">' + i18n['js_pagination_page'] + '</div>' +
+                        '</div>' +
+                        '<input class="form-control" ng-model="userInputPage" type="number" min="{{sliderOptions.floor}}" max="{{sliderOptions.ceil}}" />' +
+                    '</div>',
         };
     });
