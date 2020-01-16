@@ -60,15 +60,6 @@ use luya\admin\Module;
                             </select>
                         </div>
                     </div>
-                    <div class="form-group form-side-by-side">
-                        <div class="form-side form-side-label">
-                            <label for="userSettings.isDeveloper"><?= Module::t('settings_developer_mode') ?></label>
-                        </div>
-                        <div class="form-side">
-                            <input type="checkbox" ng-model="settings.isDeveloper" id="userSettings.isDeveloper" />
-                            <label for="userSettings.isDeveloper"></label>
-                        </div>
-                    </div>
                     <button type="button" class="btn btn-save btn-icon" ng-click="changeSettings(settings)"><?= Module::t('layout_rightbar_savebtn'); ?></button>
                 </div>
             </div>
